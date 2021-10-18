@@ -41,11 +41,19 @@ driver = "memory"
 [grpc.services.ocmcore]
 driver = "nextcloud"
 
+[grpc.services.ocmcore.drivers.nextcloud]
+end_point = "http://localhost:8080/apps/sciencemesh/"
+mock_http = false
+
 [grpc.services.ocminvitemanager]
 driver = "json"
 
 [grpc.services.ocmshareprovider]
 driver = "nextcloud"
+
+[grpc.services.ocmshareprovider.drivers.nextcloud]
+end_point = "http://localhost:8080/apps/sciencemesh/"
+mock_http = false
 
 [grpc.services.ocmproviderauthorizer]
 driver = "json"
@@ -57,15 +65,11 @@ providers = "providers.demo.json"
 driver = "memory"
 
 [grpc.services.storageprovider]
-driver = "localhome"
-mount_path = "/home"
-mount_id = "123e4567-e89b-12d3-a456-426655440000"
-expose_data_server = true
-data_server_url = "http://localhost:17001/data"
-enable_home_creation = true
+driver = "nextcloud"
 
-[grpc.services.storageprovider.drivers.localhome]
-user_layout = "{{.Username}}"
+[grpc.services.storageprovider.drivers.nextcloud]
+end_point = "http://localhost:8080/apps/sciencemesh/"
+mock_http = false
 
 [grpc.services.authprovider]
 auth_manager = "json"
