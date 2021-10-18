@@ -66,6 +66,14 @@ func (fs *Decomposedfs) CreateStorageSpace(ctx context.Context, req *provider.Cr
 		return nil, err
 	}
 
+	// always enable propagation on the storage space root
+	nodePath := n.InternalPath()
+	// mark the space root node as the end of propagation
+	if err = xattr.Set(nodePath, xattrs.PropagationAttr, []byte("1")); err != nil {
+		appctx.GetLogger(ctx).Error().Err(err).Interface("node", n).Msg("could not mark node to propagate")
+		return nil, err
+	}
+
 	if err := fs.createHiddenSpaceFolder(ctx, n); err != nil {
 		return nil, err
 	}
@@ -84,9 +92,11 @@ func (fs *Decomposedfs) CreateStorageSpace(ctx context.Context, req *provider.Cr
 		return nil, err
 	}
 
-	// set default space quota
-	if err := n.SetMetadata(xattrs.QuotaAttr, strconv.FormatUint(req.GetQuota().QuotaMaxBytes, 10)); err != nil {
-		return nil, err
+	if q := req.GetQuota(); q != nil {
+		// set default space quota
+		if err := n.SetMetadata(xattrs.QuotaAttr, strconv.FormatUint(q.QuotaMaxBytes, 10)); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := n.SetMetadata(xattrs.SpaceNameAttr, req.Name); err != nil {
@@ -223,15 +233,13 @@ func (fs *Decomposedfs) ListStorageSpaces(ctx context.Context, filter []*provide
 					// do not list shares as spaces for the owner
 					continue
 				}
-			case "project":
+			default:
 				sname, err := xattr.Get(n.InternalPath(), xattrs.SpaceNameAttr)
 				if err != nil {
 					appctx.GetLogger(ctx).Error().Err(err).Interface("node", n).Msg("could not read space name, attribute not found")
 					continue
 				}
 				space.Name = string(sname)
-			default:
-				space.Name = "root"
 			}
 
 			// filter out spaces user cannot access (currently based on stat permission)
