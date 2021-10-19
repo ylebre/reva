@@ -154,7 +154,7 @@ func (sm *Manager) do(ctx context.Context, a Action) (int, []byte, error) {
 	// if err != nil {
 	// 	return 0, nil, err
 	// }
-	url := "http://localhost:8080/index.php/apps/sciencemesh/~marie/api/ocm/" + a.verb
+	url := "http://marie:radioactivity@localhost:8080/index.php/apps/sciencemesh/~marie/api/ocm/" + a.verb
 	// url := sm.endPoint + "~" + user.Username + "/api/ocm/" + a.verb
 
 	log.Info().Msgf("am.do %s %s", url, a.argS)
