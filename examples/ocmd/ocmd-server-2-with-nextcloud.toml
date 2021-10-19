@@ -42,7 +42,7 @@ driver = "memory"
 driver = "nextcloud"
 
 [grpc.services.ocmcore.drivers.nextcloud]
-end_point = "http://localhost:8080/apps/sciencemesh/"
+end_point = "http://marie:radioactivity@localhost:8080/index.php/apps/sciencemesh/"
 mock_http = false
 
 [grpc.services.ocminvitemanager]
@@ -52,7 +52,7 @@ driver = "json"
 driver = "nextcloud"
 
 [grpc.services.ocmshareprovider.drivers.nextcloud]
-end_point = "http://localhost:8080/apps/sciencemesh/"
+end_point = "http://marie:radioactivity@localhost:8080/index.php/apps/sciencemesh/"
 mock_http = false
 
 [grpc.services.ocmproviderauthorizer]
@@ -68,7 +68,7 @@ driver = "memory"
 driver = "nextcloud"
 
 [grpc.services.storageprovider.drivers.nextcloud]
-end_point = "http://localhost:8080/apps/sciencemesh/"
+end_point = "http://marie:radioactivity@localhost:8080/index.php/apps/sciencemesh/"
 mock_http = false
 
 [grpc.services.authprovider]
