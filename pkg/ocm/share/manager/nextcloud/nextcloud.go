@@ -251,7 +251,7 @@ func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.Sh
 		return nil, err
 	}
 
-	_, body, err := sm.do(ctx, Action{"Share", string(bodyStr)})
+	_, body, err := sm.do(ctx, Action{"addShare", string(bodyStr)})
 
 	if err != nil {
 		return nil, err
