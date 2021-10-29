@@ -215,21 +215,21 @@ func (sm *Manager) do(ctx context.Context, a Action) (int, []byte, error) {
 func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.ShareGrant, name string,
 	pi *ocmprovider.ProviderInfo, pm string, owner *userpb.UserId, token string, st ocm.Share_ShareType) (*ocm.Share, error) {
 	type OptionsStruct struct {
-		SharedSecret string `json"sharedSecret"`
-		Permissions string `json"permissions"`
+		SharedSecret string `json:"sharedSecret"`
+		Permissions string `json:"permissions"`
 	}
 	type protocolStruct struct {
-		Name string `json"name"`
-		Options OptionsStruct `json"options"`
+		Name string `json:"name"`
+		Options OptionsStruct `json:"options"`
 	}
 	type paramsObj struct {
 		Md *provider.ResourceId `json:"md"`
 		G  *ocm.ShareGrant      `json:"g"`
 		ProviderDomain string `json:"provider_domain"`
-		ResourceType string `json"resource_type"`
-		ProviderId int `json"provider_id"`
-		OwnerDisplayName string `json"owner_display_name"`
-		Protocol protocolStruct `json"protocol"`
+		ResourceType string `json:"resource_type"`
+		ProviderId int `json:"provider_id"`
+		OwnerDisplayName string `json:"owner_display_name"`
+		Protocol protocolStruct `json:"protocol"`
 	}
 	bodyObj := &paramsObj{
 		Md: md,
