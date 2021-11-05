@@ -150,13 +150,12 @@ func (sm *Manager) SetHTTPClient(c *http.Client) {
 
 func (sm *Manager) do(ctx context.Context, a Action) (int, []byte, error) {
 	log := appctx.GetLogger(ctx)
-	user, err := getUser(ctx)
-	if err != nil {
-		return 0, nil, err
-	}
-	// url := am.endPoint + "~" + a.username + "/api/" + a.verb
-	// url := "http://localhost/apps/sciencemesh/~" + user.Username + "/api/share/" + a.verb
-	url := sm.endPoint + "~" + user.Username + "/api/ocm/" + a.verb
+	// user, err := getUser(ctx)
+	// if err != nil {
+	// 	return 0, nil, err
+	// }
+	url := "http://marie:radioactivity@localhost:8080/index.php/apps/sciencemesh/~marie/api/ocm/" + a.verb
+	// url := sm.endPoint + "~" + user.Username + "/api/ocm/" + a.verb
 
 	log.Info().Msgf("am.do %s %s", url, a.argS)
 	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(a.argS))
@@ -182,22 +181,77 @@ func (sm *Manager) do(ctx context.Context, a Action) (int, []byte, error) {
 
 // Share as defined in the ocm.share.Manager interface
 // https://github.com/cs3org/reva/blob/v1.13.0/pkg/ocm/share/share.go#L30-L57
+// adapted to https://github.com/pondersource/nc-sciencemesh/issues/90#issuecomment-952836402
+// curl -v -H  'content-type:application/json' -X POST -d '
+// {
+// 	"md":{
+// 		"opaque_id":"fileid-einstein%2Fmy-folder"
+// 	},
+// 	"g":{
+// 		"grantee":{
+// 			"type":1,
+// 			"Id":{
+// 				"UserId":
+// 				{"idp":"cesnet.cz",
+// 				"opaque_id":"marie",
+// 				"type":1
+// 				}
+// 			}
+// 		}
+// 	},
+// 	"provider_domain":"cern.ch",
+// 	"resource_type":"file",
+// 	"provider_id":2,
+// 	"owner_display_name":"Albert Einstein",
+// 	"protocol":{
+// 		"name":"webdav",
+// 		"options":{
+// 			"sharedSecret":"secret",
+// 			"permissions":"webdav-property"
+// 		}
+// 	}
+// }' http://marie:radioactivity@localhost:8080/index.php/apps/sciencemesh/~marie/api/ocm/addShare
+
 func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.ShareGrant, name string,
 	pi *ocmprovider.ProviderInfo, pm string, owner *userpb.UserId, token string, st ocm.Share_ShareType) (*ocm.Share, error) {
+	type OptionsStruct struct {
+		SharedSecret string `json:"sharedSecret"`
+		Permissions string `json:"permissions"`
+	}
+	type protocolStruct struct {
+		Name string `json:"name"`
+		Options OptionsStruct `json:"options"`
+	}
 	type paramsObj struct {
 		Md *provider.ResourceId `json:"md"`
 		G  *ocm.ShareGrant      `json:"g"`
+		ProviderDomain string `json:"provider_domain"`
+		ResourceType string `json:"resource_type"`
+		ProviderId int `json:"provider_id"`
+		OwnerDisplayName string `json:"owner_display_name"`
+		Protocol protocolStruct `json:"protocol"`
 	}
 	bodyObj := &paramsObj{
 		Md: md,
 		G:  g,
+		ProviderDomain: "cern.ch",
+		ResourceType: "file",
+		ProviderId: 2,
+		OwnerDisplayName: "Albert Einstein",
+		Protocol: protocolStruct{
+			Name: "webdav",
+			Options: OptionsStruct{
+				SharedSecret: "secret",
+				Permissions: "webdav-property",
+			},
+		},
 	}
 	bodyStr, err := json.Marshal(bodyObj)
 	if err != nil {
 		return nil, err
 	}
 
-	_, body, err := sm.do(ctx, Action{"Share", string(bodyStr)})
+	_, body, err := sm.do(ctx, Action{"addShare", string(bodyStr)})
 
 	if err != nil {
 		return nil, err
