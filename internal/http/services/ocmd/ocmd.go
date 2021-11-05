@@ -47,9 +47,9 @@ type Config struct {
 func (c *Config) init() {
 	c.GatewaySvc = sharedconf.GetGatewaySVC(c.GatewaySvc)
 
-	if c.Prefix == "" {
-		c.Prefix = "ocm"
-	}
+	// if c.Prefix == "" {
+	// 	c.Prefix = "ocm"
+	// }
 }
 
 type svc struct {
@@ -78,6 +78,8 @@ func New(m map[string]interface{}, log *zerolog.Logger) (global.Service, error) 
 	s.InvitesHandler = new(invitesHandler)
 	s.SharesHandler.init(s.Conf)
 	s.NotificationsHandler.init(s.Conf)
+	log.Debug().Str("initializing ConfigHandler Host", s.Conf.Host)
+
 	s.ConfigHandler.init(s.Conf)
 	s.InvitesHandler.init(s.Conf)
 
@@ -94,7 +96,7 @@ func (s *svc) Prefix() string {
 }
 
 func (s *svc) Unprotected() []string {
-	return []string{"/invites/accept", "/shares", "/ocm-provider"}
+	return []string{"/invites/accept", "/shares", "/ocm-provider", "/notifications"}
 }
 
 func (s *svc) Handler() http.Handler {
