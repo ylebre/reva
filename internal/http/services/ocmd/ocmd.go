@@ -21,7 +21,12 @@ package ocmd
 import (
 	"net/http"
 
+	rpc "github.com/cs3org/go-cs3apis/cs3/rpc/v1beta1"
+	link "github.com/cs3org/go-cs3apis/cs3/sharing/link/v1beta1"
+	provider "github.com/cs3org/go-cs3apis/cs3/storage/provider/v1beta1"
+
 	"github.com/cs3org/reva/pkg/appctx"
+	"github.com/cs3org/reva/pkg/rgrpc/todo/pool"
 	"github.com/cs3org/reva/pkg/rhttp/global"
 	"github.com/cs3org/reva/pkg/rhttp/router"
 	"github.com/cs3org/reva/pkg/sharedconf"
@@ -96,7 +101,7 @@ func (s *svc) Prefix() string {
 }
 
 func (s *svc) Unprotected() []string {
-	return []string{"/invites/accept", "/shares", "/ocm-provider", "/notifications"}
+	return []string{"/invites/accept", "/shares", "/ocm-provider", "/notifications", "/send"}
 }
 
 func (s *svc) Handler() http.Handler {
@@ -121,6 +126,65 @@ func (s *svc) Handler() http.Handler {
 			return
 		case "invites":
 			s.InvitesHandler.Handler().ServeHTTP(w, r)
+			return
+		case "send":
+			gatewayAddr := s.Conf.GatewaySvc
+			gatewayClient, err := pool.GetGatewayServiceClient(gatewayAddr)
+			if err != nil {
+				log.Error().Msg("cannot get grpc client!")
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			// copied from cmd/reva/public-share-create.go:
+			ref := &provider.Reference{Path: "/some/path/that/should/come/from/next.cloud"}
+
+			req := &provider.StatRequest{Ref: ref}
+			res, err := gatewayClient.Stat(ctx, req)
+			if err != nil {
+				log.Error().Msg("error sending: stat file/folder to share")
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			if res.Status.Code != rpc.Code_CODE_OK {
+				log.Error().Msg("error returned: stat file/folder to share")
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			// see cmd/reva/share-creat.go:getSharePerm
+			readerPermission := &provider.ResourcePermissions{
+				GetPath:              true,
+				InitiateFileDownload: true,
+				ListFileVersions:     true,
+				ListContainer:        true,
+				Stat:                 true,
+			}
+
+			grant := &link.Grant{
+				Permissions: &link.PublicSharePermissions{
+					Permissions: readerPermission,
+				},
+			}
+			shareRequest := &link.CreatePublicShareRequest{
+				ResourceInfo: res.Info,
+				Grant:        grant,
+			}
+
+			shareRes, err := gatewayClient.CreatePublicShare(ctx, shareRequest)
+			if err != nil {
+				log.Error().Msg("error sending: CreatePlublicShare")
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			if shareRes.Status.Code != rpc.Code_CODE_OK {
+				log.Error().Msg("error returned: CreatePlublicShare")
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			w.WriteHeader(http.StatusOK)
 			return
 		}
 
