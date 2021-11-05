@@ -16,7 +16,7 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-package eoshome
+package eoswrapper
 
 import (
 	"bytes"
@@ -40,7 +40,7 @@ func init() {
 }
 
 const (
-	eosProjectsNamespace = "/eos/project/"
+	eosProjectsNamespace = "/eos/project"
 
 	// We can use a regex for these, but that might have inferior performance
 	projectSpaceGroupsPrefix      = "cernbox-project-"
@@ -49,6 +49,7 @@ const (
 
 type wrapper struct {
 	storage.FS
+	conf            *eosfs.Config
 	mountIDTemplate *template.Template
 }
 
@@ -62,6 +63,11 @@ func parseConfig(m map[string]interface{}) (*eosfs.Config, string, error) {
 	// default to version invariance if not configured
 	if _, ok := m["version_invariant"]; !ok {
 		c.VersionInvariant = true
+	}
+
+	// allow recycle operations for project spaces
+	if !c.EnableHome && strings.HasPrefix(c.Namespace, eosProjectsNamespace) {
+		c.AllowPathRecycleOperations = true
 	}
 
 	t, ok := m["mount_id_template"].(string)
@@ -90,7 +96,7 @@ func New(m map[string]interface{}) (storage.FS, error) {
 		return nil, err
 	}
 
-	return &wrapper{FS: eos, mountIDTemplate: mountIDTemplate}, nil
+	return &wrapper{FS: eos, conf: c, mountIDTemplate: mountIDTemplate}, nil
 }
 
 // We need to override the two methods, GetMD and ListFolder to fill the
@@ -142,15 +148,15 @@ func (w *wrapper) getMountID(ctx context.Context, r *provider.ResourceInfo) stri
 }
 
 func (w *wrapper) setProjectSharingPermissions(ctx context.Context, r *provider.ResourceInfo) error {
-	if strings.HasPrefix(r.Path, eosProjectsNamespace) {
+	// Check if this storage provider corresponds to a project spaces instance
+	if strings.HasPrefix(w.conf.Namespace, eosProjectsNamespace) {
 
-		// Extract project name from the path resembling /eos/project/c/cernbox/minutes/..
-		path := strings.TrimPrefix(r.Path, eosProjectsNamespace)
-		parts := strings.SplitN(path, "/", 3)
-		if len(parts) != 3 {
+		// Extract project name from the path resembling /c/cernbox or /c/cernbox/minutes/..
+		parts := strings.SplitN(r.Path, "/", 4)
+		if len(parts) != 4 && len(parts) != 3 {
 			return errtypes.BadRequest("eoswrapper: path does not follow the allowed format")
 		}
-		adminGroup := projectSpaceGroupsPrefix + parts[1] + projectSpaceAdminGroupsSuffix
+		adminGroup := projectSpaceGroupsPrefix + parts[2] + projectSpaceAdminGroupsSuffix
 		user := ctxpkg.ContextMustGetUser(ctx)
 
 		for _, g := range user.Groups {

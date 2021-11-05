@@ -442,7 +442,7 @@ func (nc *StorageDriver) RestoreRevision(ctx context.Context, ref *provider.Refe
 }
 
 // ListRecycle as defined in the storage.FS interface
-func (nc *StorageDriver) ListRecycle(ctx context.Context, key string, path string) ([]*provider.RecycleItem, error) {
+func (nc *StorageDriver) ListRecycle(ctx context.Context, basePath, key string, relativePath string) ([]*provider.RecycleItem, error) {
 	log := appctx.GetLogger(ctx)
 	log.Info().Msg("ListRecycle")
 	type paramsObj struct {
@@ -451,7 +451,7 @@ func (nc *StorageDriver) ListRecycle(ctx context.Context, key string, path strin
 	}
 	bodyObj := &paramsObj{
 		Key:  key,
-		Path: path,
+		Path: relativePath,
 	}
 	bodyStr, _ := json.Marshal(bodyObj)
 
@@ -473,7 +473,7 @@ func (nc *StorageDriver) ListRecycle(ctx context.Context, key string, path strin
 }
 
 // RestoreRecycleItem as defined in the storage.FS interface
-func (nc *StorageDriver) RestoreRecycleItem(ctx context.Context, key string, path string, restoreRef *provider.Reference) error {
+func (nc *StorageDriver) RestoreRecycleItem(ctx context.Context, basePath, key, relativePath string, restoreRef *provider.Reference) error {
 	type paramsObj struct {
 		Key        string              `json:"key"`
 		Path       string              `json:"path"`
@@ -481,7 +481,7 @@ func (nc *StorageDriver) RestoreRecycleItem(ctx context.Context, key string, pat
 	}
 	bodyObj := &paramsObj{
 		Key:        key,
-		Path:       path,
+		Path:       relativePath,
 		RestoreRef: restoreRef,
 	}
 	bodyStr, _ := json.Marshal(bodyObj)
@@ -495,14 +495,14 @@ func (nc *StorageDriver) RestoreRecycleItem(ctx context.Context, key string, pat
 }
 
 // PurgeRecycleItem as defined in the storage.FS interface
-func (nc *StorageDriver) PurgeRecycleItem(ctx context.Context, key string, path string) error {
+func (nc *StorageDriver) PurgeRecycleItem(ctx context.Context, basePath, key, relativePath string) error {
 	type paramsObj struct {
 		Key  string `json:"key"`
 		Path string `json:"path"`
 	}
 	bodyObj := &paramsObj{
 		Key:  key,
-		Path: path,
+		Path: relativePath,
 	}
 	bodyStr, _ := json.Marshal(bodyObj)
 	log := appctx.GetLogger(ctx)
@@ -758,7 +758,7 @@ func (nc *StorageDriver) UnsetArbitraryMetadata(ctx context.Context, ref *provid
 }
 
 // ListStorageSpaces as defined in the storage.FS interface
-func (nc *StorageDriver) ListStorageSpaces(ctx context.Context, f []*provider.ListStorageSpacesRequest_Filter) ([]*provider.StorageSpace, error) {
+func (nc *StorageDriver) ListStorageSpaces(ctx context.Context, f []*provider.ListStorageSpacesRequest_Filter, _ map[string]struct{}) ([]*provider.StorageSpace, error) {
 	bodyStr, _ := json.Marshal(f)
 	_, respBody, err := nc.do(ctx, Action{"ListStorageSpaces", string(bodyStr)})
 	if err != nil {
@@ -786,6 +786,22 @@ func (nc *StorageDriver) CreateStorageSpace(ctx context.Context, req *provider.C
 		return nil, err
 	}
 	var respObj provider.CreateStorageSpaceResponse
+	err = json.Unmarshal(respBody, &respObj)
+	if err != nil {
+		return nil, err
+	}
+	return &respObj, nil
+}
+
+// UpdateStorageSpace updates a storage space
+func (nc *StorageDriver) UpdateStorageSpace(ctx context.Context, req *provider.UpdateStorageSpaceRequest) (*provider.UpdateStorageSpaceResponse, error) {
+	bodyStr, _ := json.Marshal(req)
+	_, respBody, err := nc.do(ctx, Action{"UpdateStorageSpace", string(bodyStr)})
+	if err != nil {
+		return nil, err
+	}
+	var respObj provider.UpdateStorageSpaceResponse
+	fmt.Println(string(respBody))
 	err = json.Unmarshal(respBody, &respObj)
 	if err != nil {
 		return nil, err

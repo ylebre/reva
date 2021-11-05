@@ -215,6 +215,7 @@ func NewEOSFS(c *Config) (storage.FS, error) {
 
 func (fs *eosfs) userIDcacheWarmup() {
 	if !fs.conf.EnableHome {
+		time.Sleep(2 * time.Second)
 		ctx := context.Background()
 		paths := []string{fs.wrap(ctx, "/")}
 		auth, _ := fs.getRootAuth(ctx)
@@ -771,10 +772,29 @@ func (fs *eosfs) GetMD(ctx context.Context, ref *provider.Reference, mdKeys []st
 	log := appctx.GetLogger(ctx)
 	log.Info().Msg("eosfs: get md for ref:" + ref.String())
 
-	p, err := fs.resolve(ctx, ref)
+	u, err := getUser(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "eosfs: error resolving reference")
+		return nil, err
 	}
+	auth, err := fs.getUserAuth(ctx, u, "")
+	if err != nil {
+		return nil, err
+	}
+
+	if ref.ResourceId != nil {
+		fid, err := strconv.ParseUint(ref.ResourceId.OpaqueId, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("error converting string to int for eos fileid: %s", ref.ResourceId.OpaqueId)
+		}
+
+		eosFileInfo, err := fs.c.GetFileInfoByInode(ctx, auth, fid)
+		if err != nil {
+			return nil, err
+		}
+		return fs.convertToResourceInfo(ctx, eosFileInfo)
+	}
+
+	p := ref.Path
 
 	// if path is home we need to add in the response any shadow folder in the shadow homedirectory.
 	if fs.conf.EnableHome {
@@ -784,16 +804,6 @@ func (fs *eosfs) GetMD(ctx context.Context, ref *provider.Reference, mdKeys []st
 	}
 
 	fn := fs.wrap(ctx, p)
-
-	u, err := getUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	auth, err := fs.getUserAuth(ctx, u, fn)
-	if err != nil {
-		return nil, err
-	}
-
 	eosFileInfo, err := fs.c.GetFileInfoByPath(ctx, auth, fn)
 	if err != nil {
 		return nil, err
@@ -1449,7 +1459,7 @@ func (fs *eosfs) RestoreRevision(ctx context.Context, ref *provider.Reference, r
 	return fs.c.RollbackToVersion(ctx, auth, fn, revisionKey)
 }
 
-func (fs *eosfs) PurgeRecycleItem(ctx context.Context, key, itemPath string) error {
+func (fs *eosfs) PurgeRecycleItem(ctx context.Context, basePath, key, relativePath string) error {
 	return errtypes.NotSupported("eosfs: operation not supported")
 }
 
@@ -1466,14 +1476,35 @@ func (fs *eosfs) EmptyRecycle(ctx context.Context) error {
 	return fs.c.PurgeDeletedEntries(ctx, auth)
 }
 
-func (fs *eosfs) ListRecycle(ctx context.Context, key, itemPath string) ([]*provider.RecycleItem, error) {
-	u, err := getUser(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "eosfs: no user in ctx")
-	}
-	auth, err := fs.getUserAuth(ctx, u, "")
-	if err != nil {
-		return nil, err
+func (fs *eosfs) ListRecycle(ctx context.Context, basePath, key, relativePath string) ([]*provider.RecycleItem, error) {
+	var auth eosclient.Authorization
+
+	if !fs.conf.EnableHome && fs.conf.AllowPathRecycleOperations && basePath != "/" {
+		// We need to access the recycle bin for a non-home reference.
+		// We'll get the owner of the particular resource and impersonate them
+		// if we have access to it.
+		md, err := fs.GetMD(ctx, &provider.Reference{Path: basePath}, nil)
+		if err != nil {
+			return nil, err
+		}
+		if md.PermissionSet.ListRecycle {
+			auth, err = fs.getUIDGateway(ctx, md.Owner)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, errtypes.PermissionDenied("eosfs: user doesn't have permissions to restore recycled items")
+		}
+	} else {
+		// We just act on the logged-in user's recycle bin
+		u, err := getUser(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "eosfs: no user in ctx")
+		}
+		auth, err = fs.getUserAuth(ctx, u, "")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	eosDeletedEntries, err := fs.c.ListDeletedEntries(ctx, auth)
@@ -1496,21 +1527,47 @@ func (fs *eosfs) ListRecycle(ctx context.Context, key, itemPath string) ([]*prov
 	return recycleEntries, nil
 }
 
-func (fs *eosfs) RestoreRecycleItem(ctx context.Context, key, itemPath string, restoreRef *provider.Reference) error {
-	u, err := getUser(ctx)
-	if err != nil {
-		return errors.Wrap(err, "eosfs: no user in ctx")
-	}
-	auth, err := fs.getUserAuth(ctx, u, "")
-	if err != nil {
-		return err
+func (fs *eosfs) RestoreRecycleItem(ctx context.Context, basePath, key, relativePath string, restoreRef *provider.Reference) error {
+	var auth eosclient.Authorization
+
+	if !fs.conf.EnableHome && fs.conf.AllowPathRecycleOperations && basePath != "/" {
+		// We need to access the recycle bin for a non-home reference.
+		// We'll get the owner of the particular resource and impersonate them
+		// if we have access to it.
+		md, err := fs.GetMD(ctx, &provider.Reference{Path: basePath}, nil)
+		if err != nil {
+			return err
+		}
+		if md.PermissionSet.RestoreRecycleItem {
+			auth, err = fs.getUIDGateway(ctx, md.Owner)
+			if err != nil {
+				return err
+			}
+		} else {
+			return errtypes.PermissionDenied("eosfs: user doesn't have permissions to restore recycled items")
+		}
+	} else {
+		// We just act on the logged-in user's recycle bin
+		u, err := getUser(ctx)
+		if err != nil {
+			return errors.Wrap(err, "eosfs: no user in ctx")
+		}
+		auth, err = fs.getUserAuth(ctx, u, "")
+		if err != nil {
+			return err
+		}
 	}
 
 	return fs.c.RestoreDeletedEntry(ctx, auth, key)
 }
 
-func (fs *eosfs) ListStorageSpaces(ctx context.Context, filter []*provider.ListStorageSpacesRequest_Filter) ([]*provider.StorageSpace, error) {
+func (fs *eosfs) ListStorageSpaces(ctx context.Context, filter []*provider.ListStorageSpacesRequest_Filter, _ map[string]struct{}) ([]*provider.StorageSpace, error) {
 	return nil, errtypes.NotSupported("list storage spaces")
+}
+
+// UpdateStorageSpace updates a storage space
+func (fs *eosfs) UpdateStorageSpace(ctx context.Context, req *provider.UpdateStorageSpaceRequest) (*provider.UpdateStorageSpaceResponse, error) {
+	return nil, errtypes.NotSupported("update storage space")
 }
 
 func (fs *eosfs) convertToRecycleItem(ctx context.Context, eosDeletedItem *eosclient.DeletedEntry) (*provider.RecycleItem, error) {
