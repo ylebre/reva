@@ -20,6 +20,7 @@ package ocmshareprovider
 
 import (
 	"context"
+	"fmt"
 
 	ocm "github.com/cs3org/go-cs3apis/cs3/sharing/ocm/v1beta1"
 	"github.com/cs3org/reva/pkg/errtypes"
@@ -103,7 +104,7 @@ func (s *service) UnprotectedEndpoints() []string {
 }
 
 func (s *service) CreateOCMShare(ctx context.Context, req *ocm.CreateOCMShareRequest) (*ocm.CreateOCMShareResponse, error) {
-
+	fmt.Println("In internal/grpc/services/ocmshareprovider/ocmshareprovider#CreateOCMShare!")
 	if req.Opaque == nil {
 		return &ocm.CreateOCMShareResponse{
 			Status: status.NewInternal(ctx, errtypes.BadRequest("can't find resource permissions"), ""),
@@ -160,6 +161,9 @@ func (s *service) CreateOCMShare(ctx context.Context, req *ocm.CreateOCMShareReq
 			}, nil
 		}
 	}
+
+	// func (m *mgr) Share(ctx context.Context, md *provider.ResourceId, g *ocm.ShareGrant, name string,
+	// 	pi *ocmprovider.ProviderInfo, pm string, owner *userpb.UserId, token string, st ocm.Share_ShareType) (*ocm.Share, error) {
 
 	share, err := s.sm.Share(ctx, req.ResourceId, req.Grant, name, req.RecipientMeshProvider, permissions, nil, "", sharetype)
 	if err != nil {

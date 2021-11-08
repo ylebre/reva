@@ -22,6 +22,7 @@ package nextcloud
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -214,6 +215,7 @@ func (sm *Manager) do(ctx context.Context, a Action) (int, []byte, error) {
 
 func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.ShareGrant, name string,
 	pi *ocmprovider.ProviderInfo, pm string, owner *userpb.UserId, token string, st ocm.Share_ShareType) (*ocm.Share, error) {
+	fmt.Println("In pkg/ocm/share/manager/nextcloud#Share!")
 	type OptionsStruct struct {
 		SharedSecret string `json:"sharedSecret"`
 		Permissions  string `json:"permissions"`

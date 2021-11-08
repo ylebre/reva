@@ -21,11 +21,15 @@ package ocmd
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	gateway "github.com/cs3org/go-cs3apis/cs3/gateway/v1beta1"
+	userpb "github.com/cs3org/go-cs3apis/cs3/identity/user/v1beta1"
+	ocmprovider "github.com/cs3org/go-cs3apis/cs3/ocm/provider/v1beta1"
 	rpc "github.com/cs3org/go-cs3apis/cs3/rpc/v1beta1"
-	link "github.com/cs3org/go-cs3apis/cs3/sharing/link/v1beta1"
+	ocm "github.com/cs3org/go-cs3apis/cs3/sharing/ocm/v1beta1"
 	provider "github.com/cs3org/go-cs3apis/cs3/storage/provider/v1beta1"
+	types "github.com/cs3org/go-cs3apis/cs3/types/v1beta1"
 	ctxpkg "github.com/cs3org/reva/pkg/ctx"
 	"google.golang.org/grpc/metadata"
 
@@ -132,6 +136,12 @@ func (s *svc) Handler() http.Handler {
 			s.InvitesHandler.Handler().ServeHTTP(w, r)
 			return
 		case "send":
+			loginType := "basic"
+			loginUsername := "einstein"
+			loginPassword := "relativity"
+			path := "/home"
+			recipientUsername := "marie"
+			recipientHost := "localhost:17000"
 			gatewayAddr := s.Conf.GatewaySvc
 			gatewayClient, err := pool.GetGatewayServiceClient(gatewayAddr)
 			if err != nil {
@@ -140,9 +150,9 @@ func (s *svc) Handler() http.Handler {
 				return
 			}
 			loginReq := &gateway.AuthenticateRequest{
-				Type:         "basic",
-				ClientId:     "einstein",
-				ClientSecret: "relativity",
+				Type:         loginType,
+				ClientId:     loginUsername,
+				ClientSecret: loginPassword,
 			}
 
 			loginCtx := context.Background()
@@ -158,7 +168,7 @@ func (s *svc) Handler() http.Handler {
 			authCtx = metadata.AppendToOutgoingContext(authCtx, ctxpkg.TokenHeader, res.Token)
 
 			// copied from cmd/reva/public-share-create.go:
-			ref := &provider.Reference{Path: "/home"}
+			ref := &provider.Reference{Path: path}
 
 			req := &provider.StatRequest{Ref: ref}
 			res2, err := gatewayClient.Stat(authCtx, req)
@@ -183,25 +193,81 @@ func (s *svc) Handler() http.Handler {
 				Stat:                 true,
 			}
 
-			grant := &link.Grant{
-				Permissions: &link.PublicSharePermissions{
+			grant := &ocm.ShareGrant{
+				Permissions: &ocm.SharePermissions{
 					Permissions: readerPermission,
 				},
+				Grantee: &provider.Grantee{
+					Type: provider.GranteeType_GRANTEE_TYPE_USER,
+					Id: &provider.Grantee_UserId{
+						UserId: &userpb.UserId{
+							Idp:      recipientHost,
+							OpaqueId: recipientUsername,
+						},
+					},
+				},
 			}
-			shareRequest := &link.CreatePublicShareRequest{
-				ResourceInfo: res2.Info,
-				Grant:        grant,
+			shareRequest := &ocm.CreateOCMShareRequest{
+				Opaque: &types.Opaque{
+					Map: map[string]*types.OpaqueEntry{
+						"permissions": {
+							Decoder: "plain",
+							Value:   []byte(strconv.Itoa(0)),
+						},
+						"name": {
+							Decoder: "plain",
+							Value:   []byte(path),
+						},
+					},
+				},
+				ResourceId: res2.Info.Id,
+				Grant:      grant,
+				RecipientMeshProvider: &ocmprovider.ProviderInfo{
+					Name:         "oc-cesnet",
+					FullName:     "ownCloud@CESNET",
+					Description:  "OwnCloud has been designed for individual users.",
+					Organization: "CESNET",
+					Domain:       "cesnet.cz",
+					Homepage:     "https://owncloud.cesnet.cz",
+					Email:        "ownCloud@CESNET",
+					Services: []*ocmprovider.Service{
+						{
+							Endpoint: &ocmprovider.ServiceEndpoint{
+								Type: &ocmprovider.ServiceType{
+									Name:        "OCM",
+									Description: "Open Cloud Mesh",
+								},
+								Name: "CESNET - OCM API",
+								Path: "http://127.0.0.1:17001/ocm/",
+							},
+							Host:       "localhost:17000",
+							ApiVersion: "1.0",
+						},
+						{
+							Endpoint: &ocmprovider.ServiceEndpoint{
+								Type: &ocmprovider.ServiceType{
+									Name:        "WebDAV",
+									Description: "WebDAV",
+								},
+								Name: "CESNET - WebDAV API",
+								Path: "http://127.0.0.1:17001/remote.php/webdav/",
+							},
+							Host:       "localhost:17000",
+							ApiVersion: "1.0",
+						},
+					},
+				},
 			}
 
-			shareRes, err := gatewayClient.CreatePublicShare(authCtx, shareRequest)
+			shareRes, err := gatewayClient.CreateOCMShare(authCtx, shareRequest)
 			if err != nil {
-				log.Error().Msg("error sending: CreatePlublicShare")
+				log.Error().Msg("error sending: CreateShare")
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 
 			if shareRes.Status.Code != rpc.Code_CODE_OK {
-				log.Error().Msg("error returned: CreatePlublicShare")
+				log.Error().Msg("error returned: CreateShare")
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}

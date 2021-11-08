@@ -197,7 +197,7 @@ func getOCMEndpoint(originProvider *ocmprovider.ProviderInfo) (string, error) {
 
 func (m *mgr) Share(ctx context.Context, md *provider.ResourceId, g *ocm.ShareGrant, name string,
 	pi *ocmprovider.ProviderInfo, pm string, owner *userpb.UserId, token string, st ocm.Share_ShareType) (*ocm.Share, error) {
-
+	fmt.Println("In pkg/ocm/share/manager/json#Share!")
 	id := genID()
 	now := time.Now().UnixNano()
 	ts := &typespb.Timestamp{
@@ -311,7 +311,7 @@ func (m *mgr) Share(ctx context.Context, md *provider.ResourceId, g *ocm.ShareGr
 			"providerId":   fmt.Sprintf("%s:%s", md.StorageId, md.OpaqueId),
 			"owner":        userID.OpaqueId,
 			"protocol":     string(protocol),
-			"meshProvider": userID.Idp,
+			"meshProvider": "cernbox.cern.ch", // instead of "https://cernbox.cern.ch" - userID.Idp,
 		}
 		requestBody, err := json.Marshal(requestBodyMap)
 		if err != nil {
