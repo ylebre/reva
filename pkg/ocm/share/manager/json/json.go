@@ -311,7 +311,7 @@ func (m *mgr) Share(ctx context.Context, md *provider.ResourceId, g *ocm.ShareGr
 			"providerId":   fmt.Sprintf("%s:%s", md.StorageId, md.OpaqueId),
 			"owner":        userID.OpaqueId,
 			"protocol":     string(protocol),
-			"meshProvider": "cernbox.cern.ch", // instead of "https://cernbox.cern.ch" - userID.Idp,
+			"meshProvider": userID.Idp,
 		}
 		requestBody, err := json.Marshal(requestBodyMap)
 		if err != nil {
