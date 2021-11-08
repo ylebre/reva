@@ -19,22 +19,9 @@
 package ocmd
 
 import (
-	"context"
 	"net/http"
-	"strconv"
-
-	gateway "github.com/cs3org/go-cs3apis/cs3/gateway/v1beta1"
-	userpb "github.com/cs3org/go-cs3apis/cs3/identity/user/v1beta1"
-	ocmprovider "github.com/cs3org/go-cs3apis/cs3/ocm/provider/v1beta1"
-	rpc "github.com/cs3org/go-cs3apis/cs3/rpc/v1beta1"
-	ocm "github.com/cs3org/go-cs3apis/cs3/sharing/ocm/v1beta1"
-	provider "github.com/cs3org/go-cs3apis/cs3/storage/provider/v1beta1"
-	types "github.com/cs3org/go-cs3apis/cs3/types/v1beta1"
-	ctxpkg "github.com/cs3org/reva/pkg/ctx"
-	"google.golang.org/grpc/metadata"
 
 	"github.com/cs3org/reva/pkg/appctx"
-	"github.com/cs3org/reva/pkg/rgrpc/todo/pool"
 	"github.com/cs3org/reva/pkg/rhttp/global"
 	"github.com/cs3org/reva/pkg/rhttp/router"
 	"github.com/cs3org/reva/pkg/sharedconf"
@@ -71,6 +58,7 @@ type svc struct {
 	NotificationsHandler *notificationsHandler
 	ConfigHandler        *configHandler
 	InvitesHandler       *invitesHandler
+	SendHandler          *sendHandler
 }
 
 // New returns a new ocmd object
@@ -89,12 +77,14 @@ func New(m map[string]interface{}, log *zerolog.Logger) (global.Service, error) 
 	s.NotificationsHandler = new(notificationsHandler)
 	s.ConfigHandler = new(configHandler)
 	s.InvitesHandler = new(invitesHandler)
+	s.SendHandler = new(sendHandler)
 	s.SharesHandler.init(s.Conf)
 	s.NotificationsHandler.init(s.Conf)
 	log.Debug().Str("initializing ConfigHandler Host", s.Conf.Host)
 
 	s.ConfigHandler.init(s.Conf)
 	s.InvitesHandler.init(s.Conf)
+	s.SendHandler.init(s.Conf)
 
 	return s, nil
 }
@@ -136,144 +126,7 @@ func (s *svc) Handler() http.Handler {
 			s.InvitesHandler.Handler().ServeHTTP(w, r)
 			return
 		case "send":
-			loginType := "basic"
-			loginUsername := "einstein"
-			loginPassword := "relativity"
-			path := "/home"
-			recipientUsername := "marie"
-			recipientHost := "localhost:17000"
-			gatewayAddr := s.Conf.GatewaySvc
-			gatewayClient, err := pool.GetGatewayServiceClient(gatewayAddr)
-			if err != nil {
-				log.Error().Msg("cannot get grpc client!")
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			loginReq := &gateway.AuthenticateRequest{
-				Type:         loginType,
-				ClientId:     loginUsername,
-				ClientSecret: loginPassword,
-			}
-
-			loginCtx := context.Background()
-			res, err := gatewayClient.Authenticate(loginCtx, loginReq)
-			if err != nil {
-				log.Error().Msg("error logging in")
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			authCtx := context.Background()
-
-			authCtx = ctxpkg.ContextSetToken(authCtx, res.Token)
-			authCtx = metadata.AppendToOutgoingContext(authCtx, ctxpkg.TokenHeader, res.Token)
-
-			// copied from cmd/reva/public-share-create.go:
-			ref := &provider.Reference{Path: path}
-
-			req := &provider.StatRequest{Ref: ref}
-			res2, err := gatewayClient.Stat(authCtx, req)
-			if err != nil {
-				log.Error().Msg("error sending: stat file/folder to share")
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-
-			if res2.Status.Code != rpc.Code_CODE_OK {
-				log.Error().Msg("error returned: stat file/folder to share")
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-
-			// see cmd/reva/share-creat.go:getSharePerm
-			readerPermission := &provider.ResourcePermissions{
-				GetPath:              true,
-				InitiateFileDownload: true,
-				ListFileVersions:     true,
-				ListContainer:        true,
-				Stat:                 true,
-			}
-
-			grant := &ocm.ShareGrant{
-				Permissions: &ocm.SharePermissions{
-					Permissions: readerPermission,
-				},
-				Grantee: &provider.Grantee{
-					Type: provider.GranteeType_GRANTEE_TYPE_USER,
-					Id: &provider.Grantee_UserId{
-						UserId: &userpb.UserId{
-							Idp:      recipientHost,
-							OpaqueId: recipientUsername,
-						},
-					},
-				},
-			}
-			shareRequest := &ocm.CreateOCMShareRequest{
-				Opaque: &types.Opaque{
-					Map: map[string]*types.OpaqueEntry{
-						"permissions": {
-							Decoder: "plain",
-							Value:   []byte(strconv.Itoa(0)),
-						},
-						"name": {
-							Decoder: "plain",
-							Value:   []byte(path),
-						},
-					},
-				},
-				ResourceId: res2.Info.Id,
-				Grant:      grant,
-				RecipientMeshProvider: &ocmprovider.ProviderInfo{
-					Name:         "oc-cesnet",
-					FullName:     "ownCloud@CESNET",
-					Description:  "OwnCloud has been designed for individual users.",
-					Organization: "CESNET",
-					Domain:       "cesnet.cz",
-					Homepage:     "https://owncloud.cesnet.cz",
-					Email:        "ownCloud@CESNET",
-					Services: []*ocmprovider.Service{
-						{
-							Endpoint: &ocmprovider.ServiceEndpoint{
-								Type: &ocmprovider.ServiceType{
-									Name:        "OCM",
-									Description: "Open Cloud Mesh",
-								},
-								Name: "CESNET - OCM API",
-								Path: "http://127.0.0.1:17001/ocm/",
-							},
-							Host:       "localhost:17000",
-							ApiVersion: "1.0",
-						},
-						{
-							Endpoint: &ocmprovider.ServiceEndpoint{
-								Type: &ocmprovider.ServiceType{
-									Name:        "WebDAV",
-									Description: "WebDAV",
-								},
-								Name: "CESNET - WebDAV API",
-								Path: "http://127.0.0.1:17001/remote.php/webdav/",
-							},
-							Host:       "localhost:17000",
-							ApiVersion: "1.0",
-						},
-					},
-				},
-			}
-
-			shareRes, err := gatewayClient.CreateOCMShare(authCtx, shareRequest)
-			if err != nil {
-				log.Error().Msg("error sending: CreateShare")
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-
-			if shareRes.Status.Code != rpc.Code_CODE_OK {
-				log.Error().Msg("error returned: CreateShare")
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-
-			w.WriteHeader(http.StatusOK)
-			return
+			s.SendHandler.Handler().ServeHTTP(w, r)
 		}
 
 		log.Warn().Msg("resource not found")
