@@ -19,11 +19,15 @@
 package ocmd
 
 import (
+	"context"
 	"net/http"
 
+	gateway "github.com/cs3org/go-cs3apis/cs3/gateway/v1beta1"
 	rpc "github.com/cs3org/go-cs3apis/cs3/rpc/v1beta1"
 	link "github.com/cs3org/go-cs3apis/cs3/sharing/link/v1beta1"
 	provider "github.com/cs3org/go-cs3apis/cs3/storage/provider/v1beta1"
+	ctxpkg "github.com/cs3org/reva/pkg/ctx"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/cs3org/reva/pkg/appctx"
 	"github.com/cs3org/reva/pkg/rgrpc/todo/pool"
@@ -135,18 +139,36 @@ func (s *svc) Handler() http.Handler {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
+			loginReq := &gateway.AuthenticateRequest{
+				Type:         "basic",
+				ClientId:     "einstein",
+				ClientSecret: "relativity",
+			}
+
+			loginCtx := context.Background()
+			res, err := gatewayClient.Authenticate(loginCtx, loginReq)
+			if err != nil {
+				log.Error().Msg("error logging in")
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			authCtx := context.Background()
+
+			authCtx = ctxpkg.ContextSetToken(authCtx, res.Token)
+			authCtx = metadata.AppendToOutgoingContext(authCtx, ctxpkg.TokenHeader, res.Token)
+
 			// copied from cmd/reva/public-share-create.go:
-			ref := &provider.Reference{Path: "/some/path/that/should/come/from/next.cloud"}
+			ref := &provider.Reference{Path: "/home"}
 
 			req := &provider.StatRequest{Ref: ref}
-			res, err := gatewayClient.Stat(ctx, req)
+			res2, err := gatewayClient.Stat(authCtx, req)
 			if err != nil {
 				log.Error().Msg("error sending: stat file/folder to share")
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 
-			if res.Status.Code != rpc.Code_CODE_OK {
+			if res2.Status.Code != rpc.Code_CODE_OK {
 				log.Error().Msg("error returned: stat file/folder to share")
 				w.WriteHeader(http.StatusInternalServerError)
 				return
@@ -167,11 +189,11 @@ func (s *svc) Handler() http.Handler {
 				},
 			}
 			shareRequest := &link.CreatePublicShareRequest{
-				ResourceInfo: res.Info,
+				ResourceInfo: res2.Info,
 				Grant:        grant,
 			}
 
-			shareRes, err := gatewayClient.CreatePublicShare(ctx, shareRequest)
+			shareRes, err := gatewayClient.CreatePublicShare(authCtx, shareRequest)
 			if err != nil {
 				log.Error().Msg("error sending: CreatePlublicShare")
 				w.WriteHeader(http.StatusInternalServerError)
