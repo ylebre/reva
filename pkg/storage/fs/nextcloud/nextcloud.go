@@ -90,6 +90,9 @@ func NewStorageDriver(c *StorageDriverConfig) (*StorageDriver, error) {
 		client, _ = TestingHTTPClient(h)
 		// FIXME: defer teardown()
 	} else {
+		if len(c.EndPoint) == 0 {
+			return nil, errors.New("Please specify 'endpoint' in '[grpc.services.storageprovider.drivers.nextcloud]'")
+		}
 		client = &http.Client{}
 	}
 	return &StorageDriver{

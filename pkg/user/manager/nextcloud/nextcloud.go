@@ -94,6 +94,9 @@ func NewUserManager(c *UserManagerConfig) (*Manager, error) {
 		// Wait for SetHTTPClient to be called later
 		client = nil
 	} else {
+		if len(c.EndPoint) == 0 {
+			return nil, errors.New("Please specify 'endpoint' in '[grpc.services.userprovider.drivers.nextcloud]'")
+		}
 		client = &http.Client{}
 	}
 

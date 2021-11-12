@@ -135,6 +135,9 @@ func NewShareManager(c *ShareManagerConfig) (*Manager, error) {
 		// Wait for SetHTTPClient to be called later
 		client = nil
 	} else {
+		if len(c.EndPoint) == 0 {
+			return nil, errors.New("Please specify 'endpoint' in '[grpc.services.ocmshareprovider.drivers.nextcloud]' and  '[grpc.services.ocmcore.drivers.nextcloud]'")
+		}
 		client = &http.Client{}
 	}
 
