@@ -214,7 +214,7 @@ func (sm *Manager) do(ctx context.Context, a Action) (int, []byte, error) {
 // 			"permissions":"webdav-property"
 // 		}
 // 	}
-// }' http://marie:radioactivity@localhost:8080/index.php/apps/sciencemesh/~marie/api/ocm/addShare
+// }' http://marie:radioactivity@localhost:8080/index.php/apps/sciencemesh/~marie/api/ocm/addReceivedShare
 
 func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.ShareGrant, name string,
 	pi *ocmprovider.ProviderInfo, pm string, owner *userpb.UserId, token string, st ocm.Share_ShareType) (*ocm.Share, error) {
@@ -256,7 +256,7 @@ func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.Sh
 		return nil, err
 	}
 
-	_, body, err := sm.do(ctx, Action{"addShare", string(bodyStr)})
+	_, body, err := sm.do(ctx, Action{"addReceivedShare", string(bodyStr)})
 
 	if err != nil {
 		return nil, err
