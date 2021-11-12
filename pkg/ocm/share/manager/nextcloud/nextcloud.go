@@ -151,12 +151,12 @@ func (sm *Manager) SetHTTPClient(c *http.Client) {
 
 func (sm *Manager) do(ctx context.Context, a Action) (int, []byte, error) {
 	log := appctx.GetLogger(ctx)
-	// user, err := getUser(ctx)
-	// if err != nil {
-	// 	return 0, nil, err
-	// }
-	url := "http://marie:radioactivity@localhost:8080/index.php/apps/sciencemesh/~marie/api/ocm/" + a.verb
-	// url := sm.endPoint + "~" + user.Username + "/api/ocm/" + a.verb
+	user, err := getUser(ctx)
+	if err != nil {
+		fmt.Println("no user!")
+		return 0, nil, err
+	}
+	url := sm.endPoint + "~" + user.Username + "/api/ocm/" + a.verb
 
 	log.Info().Msgf("am.do %s %s", url, a.argS)
 	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(a.argS))

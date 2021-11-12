@@ -200,6 +200,7 @@ func (nc *StorageDriver) do(ctx context.Context, a Action) (int, []byte, error) 
 	}
 	url := nc.endPoint + "~" + user.Username + "/api/storage/" + a.verb
 	log.Info().Msgf("nc.do req %s %s", url, a.argS)
+	fmt.Printf("nc.do req %s %s\n", url, a.argS)
 	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(a.argS))
 	if err != nil {
 		return 0, nil, err
