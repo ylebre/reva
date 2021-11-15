@@ -39,6 +39,7 @@ import (
 	"github.com/cs3org/reva/pkg/errtypes"
 	"github.com/cs3org/reva/pkg/ocm/share"
 	"github.com/cs3org/reva/pkg/ocm/share/manager/registry"
+	"github.com/cs3org/reva/pkg/ocm/share/sender"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"google.golang.org/genproto/protobuf/field_mask"
@@ -265,6 +266,20 @@ func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.Sh
 	altResult := &ShareAltMap{}
 	err = json.Unmarshal(body, &altResult)
 	if altResult == nil {
+		return nil, err
+	}
+
+	userID := g.Grantee.GetUserId()
+	requestBodyMap := map[string]string{
+		"shareWith":    g.Grantee.GetUserId().OpaqueId,
+		"name":         name,
+		"providerId":   fmt.Sprintf("%s:%s", md.StorageId, md.OpaqueId),
+		"owner":        userID.OpaqueId,
+		"protocol":     "webdav",
+		"meshProvider": userID.Idp,
+	}
+	err = sender.Send(requestBodyMap, pi)
+	if err != nil {
 		return nil, err
 	}
 	return &ocm.Share{
