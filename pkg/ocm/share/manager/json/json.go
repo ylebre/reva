@@ -23,11 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net/http"
-	"net/url"
 	"os"
-	"path"
-	"strings"
 	"sync"
 	"time"
 
@@ -39,16 +35,15 @@ import (
 	ctxpkg "github.com/cs3org/reva/pkg/ctx"
 	"github.com/cs3org/reva/pkg/errtypes"
 	"github.com/cs3org/reva/pkg/ocm/share"
+
 	"github.com/cs3org/reva/pkg/ocm/share/manager/registry"
-	"github.com/cs3org/reva/pkg/rhttp"
+	"github.com/cs3org/reva/pkg/ocm/share/sender"
 	"github.com/cs3org/reva/pkg/utils"
 	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"google.golang.org/genproto/protobuf/field_mask"
 )
-
-const createOCMCoreShareEndpoint = "shares"
 
 func init() {
 	registry.Register("json", New)
@@ -73,9 +68,6 @@ func New(m map[string]interface{}) (share.Manager, error) {
 	mgr := &mgr{
 		c:     c,
 		model: model,
-		client: rhttp.GetHTTPClient(
-			rhttp.Timeout(5 * time.Second),
-		),
 	}
 
 	return mgr, nil
@@ -141,7 +133,6 @@ type mgr struct {
 	c          *config
 	sync.Mutex // concurrent access to the file
 	model      *shareModel
-	client     *http.Client
 }
 
 func (m *shareModel) Save() error {
@@ -184,15 +175,6 @@ func parseConfig(m map[string]interface{}) (*config, error) {
 
 func genID() string {
 	return uuid.New().String()
-}
-
-func getOCMEndpoint(originProvider *ocmprovider.ProviderInfo) (string, error) {
-	for _, s := range originProvider.Services {
-		if s.Endpoint.Type.Name == "OCM" {
-			return s.Endpoint.Path, nil
-		}
-	}
-	return "", errors.New("json: ocm endpoint not specified for mesh provider")
 }
 
 func (m *mgr) Share(ctx context.Context, md *provider.ResourceId, g *ocm.ShareGrant, name string,
@@ -288,7 +270,6 @@ func (m *mgr) Share(ctx context.Context, md *provider.ResourceId, g *ocm.ShareGr
 				err = errors.Wrap(err, "error marshalling protocol data")
 				return nil, err
 			}
-
 		} else {
 			protocol, err = json.Marshal(
 				map[string]interface{}{
@@ -304,7 +285,6 @@ func (m *mgr) Share(ctx context.Context, md *provider.ResourceId, g *ocm.ShareGr
 				return nil, err
 			}
 		}
-
 		requestBodyMap := map[string]string{
 			"shareWith":    g.Grantee.GetUserId().OpaqueId,
 			"name":         name,
@@ -313,44 +293,12 @@ func (m *mgr) Share(ctx context.Context, md *provider.ResourceId, g *ocm.ShareGr
 			"protocol":     string(protocol),
 			"meshProvider": userID.Idp,
 		}
-		requestBody, err := json.Marshal(requestBodyMap)
+		err = sender.Send(requestBodyMap, pi)
 		if err != nil {
-			err = errors.Wrap(err, "error marshalling request body")
-			return nil, err
-		}
-		ocmEndpoint, err := getOCMEndpoint(pi)
-		if err != nil {
-			return nil, err
-		}
-		u, err := url.Parse(ocmEndpoint)
-		if err != nil {
-			return nil, err
-		}
-		u.Path = path.Join(u.Path, createOCMCoreShareEndpoint)
-		recipientURL := u.String()
-
-		req, err := http.NewRequest("POST", recipientURL, strings.NewReader(string(requestBody)))
-		if err != nil {
-			return nil, errors.Wrap(err, "json: error framing post request")
-		}
-		req.Header.Set("Content-Type", "application/json; param=value")
-
-		resp, err := m.client.Do(req)
-		if err != nil {
-			err = errors.Wrap(err, "json: error sending post request")
+			err = errors.Wrap(err, "error marshalling protocol data")
 			return nil, err
 		}
 
-		defer resp.Body.Close()
-		if (resp.StatusCode != http.StatusCreated) && (resp.StatusCode != http.StatusOK) {
-			respBody, e := ioutil.ReadAll(resp.Body)
-			if e != nil {
-				e = errors.Wrap(e, "json: error reading request body")
-				return nil, e
-			}
-			err = errors.Wrap(errors.New(fmt.Sprintf("%s: %s", resp.Status, string(respBody))), "json: error sending create ocm core share post request")
-			return nil, err
-		}
 	}
 
 	m.Lock()
