@@ -64,7 +64,7 @@ func Send(requestBodyMap map[string]string, pi *ocmprovider.ProviderInfo) error 
 
 	req, err := http.NewRequest("POST", recipientURL, strings.NewReader(string(requestBody)))
 	if err != nil {
-		return errors.Wrap(err, "json: error framing post request")
+		return errors.Wrap(err, "sender: error framing post request")
 	}
 	req.Header.Set("Content-Type", "application/json; param=value")
 	client := rhttp.GetHTTPClient(
@@ -73,7 +73,7 @@ func Send(requestBodyMap map[string]string, pi *ocmprovider.ProviderInfo) error 
 
 	resp, err := client.Do(req)
 	if err != nil {
-		err = errors.Wrap(err, "json: error sending post request")
+		err = errors.Wrap(err, "sender: error sending post request")
 		return err
 	}
 
@@ -81,10 +81,10 @@ func Send(requestBodyMap map[string]string, pi *ocmprovider.ProviderInfo) error 
 	if (resp.StatusCode != http.StatusCreated) && (resp.StatusCode != http.StatusOK) {
 		respBody, e := ioutil.ReadAll(resp.Body)
 		if e != nil {
-			e = errors.Wrap(e, "json: error reading request body")
+			e = errors.Wrap(e, "sender: error reading request body")
 			return e
 		}
-		err = errors.Wrap(errors.New(fmt.Sprintf("%s: %s", resp.Status, string(respBody))), "json: error sending create ocm core share post request")
+		err = errors.Wrap(errors.New(fmt.Sprintf("%s: %s", resp.Status, string(respBody))), "sender: error sending create ocm core share post request")
 		return err
 	}
 	return nil
