@@ -207,6 +207,7 @@ func (sm *Manager) do(ctx context.Context, a Action) (int, []byte, error) {
 // 	"provider_domain":"cern.ch",
 // 	"resource_type":"file",
 // 	"provider_id":2,
+// 	"owner_opaque_id":"einstein",
 // 	"owner_display_name":"Albert Einstein",
 // 	"protocol":{
 // 		"name":"webdav",
@@ -234,6 +235,7 @@ func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.Sh
 		ProviderDomain   string               `json:"provider_domain"`
 		ResourceType     string               `json:"resource_type"`
 		ProviderId       int                  `json:"provider_id"`
+		OwnerOpaqueId    string               `json:"owner_opaque_id"`
 		OwnerDisplayName string               `json:"owner_display_name"`
 		Protocol         protocolStruct       `json:"protocol"`
 	}
@@ -243,6 +245,7 @@ func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.Sh
 		ProviderDomain:   "cern.ch",
 		ResourceType:     "file",
 		ProviderId:       2,
+		OwnerOpaqueId:    "einstein",
 		OwnerDisplayName: "Albert Einstein",
 		Protocol: protocolStruct{
 			Name: "webdav",
