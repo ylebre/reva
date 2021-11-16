@@ -300,12 +300,21 @@ func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.Sh
 	}
 
 	userID := g.Grantee.GetUserId()
+	protocol, err := json.Marshal(
+		map[string]interface{}{
+			"name": "webdav",
+			"options": map[string]string{
+				"permissions": pm,
+				"token":       ctxpkg.ContextMustGetToken(ctx),
+			},
+		},
+	)
 	requestBodyMap := map[string]string{
 		"shareWith":    g.Grantee.GetUserId().OpaqueId,
 		"name":         name,
 		"providerId":   fmt.Sprintf("%s:%s", md.StorageId, md.OpaqueId),
 		"owner":        userID.OpaqueId,
-		"protocol":     "webdav",
+		"protocol":     string(protocol),
 		"meshProvider": userID.Idp,
 	}
 	if isOutgoing {
