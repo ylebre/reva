@@ -153,15 +153,19 @@ func (sm *Manager) SetHTTPClient(c *http.Client) {
 	sm.client = c
 }
 
-func (sm *Manager) do(ctx context.Context, a Action) (int, []byte, error) {
-	log := appctx.GetLogger(ctx)
+func getUsername(ctx context.Context) string {
 	user, err := getUser(ctx)
 	if err != nil {
 		fmt.Println("no user!")
-		return 0, nil, err
+		return "unknown"
 	}
-	url := sm.endPoint + "~" + user.Username + "/api/ocm/" + a.verb
+	return user.Username
+}
 
+func (sm *Manager) do(ctx context.Context, a Action, username string) (int, []byte, error) {
+	url := sm.endPoint + "~" + username + "/api/ocm/" + a.verb
+
+	log := appctx.GetLogger(ctx)
 	log.Info().Msgf("am.do %s %s", url, a.argS)
 	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(a.argS))
 	if err != nil {
@@ -221,6 +225,29 @@ func (sm *Manager) do(ctx context.Context, a Action) (int, []byte, error) {
 func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.ShareGrant, name string,
 	pi *ocmprovider.ProviderInfo, pm string, owner *userpb.UserId, token string, st ocm.Share_ShareType) (*ocm.Share, error) {
 	fmt.Println("In pkg/ocm/share/manager/nextcloud#Share!")
+
+	// Since both OCMCore and OCMShareProvider use the same package, we distinguish
+	// between calls received from them on the basis of whether they provide info
+	// about the remote provider on which the share is to be created.
+	// If this info is provided, this call is on the owner's mesh provider and so
+	// we call the CreateOCMCoreShare method on the remote provider as well as
+	// calling /api/ocm/addSentShare on the Nextcloud instance.
+	// Else this is received from another provider and we only create a local share
+	// by calling /api/ocm/addReceivedShare on the Nextcloud instance.
+	var isOutgoing bool
+	var apiMethod string
+	var username string
+	if pi != nil {
+		isOutgoing = true
+		apiMethod = "addSentShare"
+		username = getUsername(ctx)
+		fmt.Println("In pkg/ocm/share/manager/nextcloud#Share: outgoing!")
+	} else {
+		apiMethod = "addReceivedShare"
+		username = g.Grantee.GetUserId().OpaqueId
+		fmt.Println("In pkg/ocm/share/manager/nextcloud#Share: incoming!")
+	}
+
 	type OptionsStruct struct {
 		SharedSecret string `json:"sharedSecret"`
 		Permissions  string `json:"permissions"`
@@ -260,7 +287,7 @@ func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.Sh
 		return nil, err
 	}
 
-	_, body, err := sm.do(ctx, Action{"addReceivedShare", string(bodyStr)})
+	_, body, err := sm.do(ctx, Action{apiMethod, string(bodyStr)}, username)
 
 	if err != nil {
 		return nil, err
@@ -281,9 +308,11 @@ func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.Sh
 		"protocol":     "webdav",
 		"meshProvider": userID.Idp,
 	}
-	err = sender.Send(requestBodyMap, pi)
-	if err != nil {
-		return nil, err
+	if isOutgoing {
+		err = sender.Send(requestBodyMap, pi)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &ocm.Share{
 		Id:          altResult.ID,
@@ -306,7 +335,7 @@ func (sm *Manager) GetShare(ctx context.Context, ref *ocm.ShareReference) (*ocm.
 	if err != nil {
 		return nil, err
 	}
-	_, body, err := sm.do(ctx, Action{"GetShare", string(bodyStr)})
+	_, body, err := sm.do(ctx, Action{"GetShare", string(bodyStr)}, getUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +367,7 @@ func (sm *Manager) Unshare(ctx context.Context, ref *ocm.ShareReference) error {
 		return err
 	}
 
-	_, _, err = sm.do(ctx, Action{"Unshare", string(bodyStr)})
+	_, _, err = sm.do(ctx, Action{"Unshare", string(bodyStr)}, getUsername(ctx))
 	return err
 }
 
@@ -358,7 +387,7 @@ func (sm *Manager) UpdateShare(ctx context.Context, ref *ocm.ShareReference, p *
 		return nil, err
 	}
 
-	_, body, err := sm.do(ctx, Action{"UpdateShare", string(bodyStr)})
+	_, body, err := sm.do(ctx, Action{"UpdateShare", string(bodyStr)}, getUsername(ctx))
 
 	if err != nil {
 		return nil, err
@@ -391,7 +420,7 @@ func (sm *Manager) ListShares(ctx context.Context, filters []*ocm.ListOCMSharesR
 		return nil, err
 	}
 
-	_, respBody, err := sm.do(ctx, Action{"ListShares", string(bodyStr)})
+	_, respBody, err := sm.do(ctx, Action{"ListShares", string(bodyStr)}, getUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -424,7 +453,7 @@ func (sm *Manager) ListShares(ctx context.Context, filters []*ocm.ListOCMSharesR
 // ListReceivedShares as defined in the ocm.share.Manager interface
 // https://github.com/cs3org/reva/blob/v1.13.0/pkg/ocm/share/share.go#L30-L57
 func (sm *Manager) ListReceivedShares(ctx context.Context) ([]*ocm.ReceivedShare, error) {
-	_, respBody, err := sm.do(ctx, Action{"ListReceivedShares", string("")})
+	_, respBody, err := sm.do(ctx, Action{"ListReceivedShares", string("")}, getUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -472,7 +501,7 @@ func (sm *Manager) GetReceivedShare(ctx context.Context, ref *ocm.ShareReference
 		return nil, err
 	}
 
-	_, respBody, err := sm.do(ctx, Action{"GetReceivedShare", string(bodyStr)})
+	_, respBody, err := sm.do(ctx, Action{"GetReceivedShare", string(bodyStr)}, getUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -523,7 +552,7 @@ func (sm Manager) UpdateReceivedShare(ctx context.Context, receivedShare *ocm.Re
 		return nil, err
 	}
 
-	_, respBody, err := sm.do(ctx, Action{"UpdateReceivedShare", string(bodyStr)})
+	_, respBody, err := sm.do(ctx, Action{"UpdateReceivedShare", string(bodyStr)}, getUsername(ctx))
 	if err != nil {
 		return nil, err
 	}

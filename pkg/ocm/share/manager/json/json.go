@@ -196,6 +196,9 @@ func (m *mgr) Share(ctx context.Context, md *provider.ResourceId, g *ocm.ShareGr
 	var isOwnersMeshProvider bool
 	if pi != nil {
 		isOwnersMeshProvider = true
+		fmt.Println("In pkg/ocm/share/manager/json#Share: outgoing!")
+	} else {
+		fmt.Println("In pkg/ocm/share/manager/json#Share: incoming!")
 	}
 
 	var userID *userpb.UserId
