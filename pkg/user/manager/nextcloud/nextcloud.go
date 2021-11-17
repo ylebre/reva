@@ -147,25 +147,29 @@ func (um *Manager) Configure(ml map[string]interface{}) error {
 
 // GetUser method as defined in https://github.com/cs3org/reva/blob/v1.13.0/pkg/user/user.go#L29-L35
 func (um *Manager) GetUser(ctx context.Context, uid *userpb.UserId) (*userpb.User, error) {
-	fmt.Printf("nextcloud user manager asking nc about a user '%s', line 150!", uid.OpaqueId)
+	// FIXME: work around https://github.com/pondersource/nc-sciencemesh/issues/148
+	return &userpb.User{
+		Id: uid,
+	}, nil
+	// fmt.Printf("nextcloud user manager asking nc about a user '%s', line 150!", uid.OpaqueId)
 
-	bodyStr, err := json.Marshal(uid)
-	if err != nil {
-		return nil, err
-	}
-	_, respBody, err := um.do(ctx, Action{"GetUser", string(bodyStr)}, uid.OpaqueId)
-	if err != nil {
-		return nil, err
-	}
+	// bodyStr, err := json.Marshal(uid)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// _, respBody, err := um.do(ctx, Action{"GetUser", string(bodyStr)}, uid.OpaqueId)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	result := &userpb.User{}
-	err = json.Unmarshal(respBody, &result)
-	fmt.Printf("response body '%s' unmarshalled to '%s'!", respBody, result.Id.OpaqueId)
+	// result := &userpb.User{}
+	// err = json.Unmarshal(respBody, &result)
+	// fmt.Printf("response body '%s' unmarshalled to '%s'!", respBody, result.Id.OpaqueId)
 
-	if err != nil {
-		return nil, err
-	}
-	return result, err
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// return result, err
 }
 
 // GetUserByClaim method as defined in https://github.com/cs3org/reva/blob/v1.13.0/pkg/user/user.go#L29-L35
