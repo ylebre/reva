@@ -266,6 +266,7 @@ func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.Sh
 		OwnerDisplayName string               `json:"owner_display_name"`
 		Protocol         protocolStruct       `json:"protocol"`
 	}
+	// FIXME: get these values from the incoming arguments
 	bodyObj := &paramsObj{
 		Md:               md,
 		G:                g,

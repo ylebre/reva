@@ -149,7 +149,10 @@ func (um *Manager) Configure(ml map[string]interface{}) error {
 func (um *Manager) GetUser(ctx context.Context, uid *userpb.UserId) (*userpb.User, error) {
 	// FIXME: work around https://github.com/pondersource/nc-sciencemesh/issues/148
 	return &userpb.User{
-		Id: uid,
+		Id: &userpb.UserId{
+			OpaqueId: uid.OpaqueId,
+			Idp:      "local",
+		},
 	}, nil
 	// fmt.Printf("nextcloud user manager asking nc about a user '%s', line 150!", uid.OpaqueId)
 
