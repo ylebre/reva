@@ -306,7 +306,7 @@ func (sm *Manager) Share(ctx context.Context, md *provider.ResourceId, g *ocm.Sh
 			"name": "webdav",
 			"options": map[string]string{
 				"permissions": pm,
-				"token":       ctxpkg.ContextMustGetToken(ctx),
+				"token":       "some-token", //FIXME! ctxpkg.ContextMustGetToken(ctx),
 			},
 		},
 	)
