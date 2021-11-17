@@ -21,6 +21,7 @@ package nextcloud
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -112,6 +113,7 @@ func (um *Manager) SetHTTPClient(c *http.Client) {
 }
 
 func getUser(ctx context.Context) (*userpb.User, error) {
+	fmt.Println("nextcloud user manager getting user from grpc context, line 116!")
 	u, ok := ctxpkg.ContextGetUser(ctx)
 	if !ok {
 		err := errors.Wrap(errtypes.UserRequired(""), "nextcloud storage driver: error getting user from ctx")
@@ -145,6 +147,8 @@ func (um *Manager) Configure(ml map[string]interface{}) error {
 
 // GetUser method as defined in https://github.com/cs3org/reva/blob/v1.13.0/pkg/user/user.go#L29-L35
 func (um *Manager) GetUser(ctx context.Context, uid *userpb.UserId) (*userpb.User, error) {
+	fmt.Printf("nextcloud user manager asking nc about a user '%s', line 150!", uid.OpaqueId)
+
 	bodyStr, err := json.Marshal(uid)
 	if err != nil {
 		return nil, err
@@ -156,6 +160,8 @@ func (um *Manager) GetUser(ctx context.Context, uid *userpb.UserId) (*userpb.Use
 
 	result := &userpb.User{}
 	err = json.Unmarshal(respBody, &result)
+	fmt.Printf("response body '%s' unmarshalled to '%s'!", respBody, result.Id.OpaqueId)
+
 	if err != nil {
 		return nil, err
 	}
