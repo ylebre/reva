@@ -44,7 +44,7 @@ func init() {
 type Manager struct {
 	client   *http.Client
 	endPoint string
-	conf	 AuthManagerConfig
+	conf	 *AuthManagerConfig
 }
 
 // AuthManagerConfig contains config for a Nextcloud-based AuthManager
@@ -97,9 +97,6 @@ func NewAuthManager(c *AuthManagerConfig) (*Manager, error) {
 		client = &http.Client{}
 	}
 	
-        log := appctx.GetLogger(ctx)
-        log.Info().Msgf("NewAuthManager [%s] [%s]", c.MockHTTP, c.EndPoint)
-        
 	return &Manager{
 		endPoint: c.EndPoint, // e.g. "http://nc/apps/sciencemesh/"
 		client:   client,
@@ -165,6 +162,7 @@ func (am *Manager) Authenticate(ctx context.Context, clientID, clientSecret stri
 		return nil, nil, err
 	}
 	log := appctx.GetLogger(ctx)
+	log.Info().Msgf("am config %s %s", am.conf.MockHTTP, am.conf.EndPoint)
 	log.Info().Msgf("Authenticate %s %s", clientID, bodyStr)
 
 	statusCode, body, err := am.do(ctx, Action{"Authenticate", clientID, string(bodyStr)})
