@@ -95,7 +95,10 @@ func NewAuthManager(c *AuthManagerConfig) (*Manager, error) {
 	} else {
 		client = &http.Client{}
 	}
-
+	
+        log := appctx.GetLogger(ctx)
+        log.Info().Msgf("NewAuthManager [%s] [%s]", c.MockHTTP, c.EndPoint)
+        
 	return &Manager{
 		endPoint: c.EndPoint, // e.g. "http://nc/apps/sciencemesh/"
 		client:   client,
