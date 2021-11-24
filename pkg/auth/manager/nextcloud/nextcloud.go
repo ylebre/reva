@@ -31,6 +31,7 @@ import (
 	"github.com/cs3org/reva/pkg/appctx"
 	"github.com/cs3org/reva/pkg/auth"
 	"github.com/cs3org/reva/pkg/auth/manager/registry"
+	"github.com/cs3org/reva/pkg/auth/scope"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 )
@@ -44,7 +45,7 @@ func init() {
 type Manager struct {
 	client   *http.Client
 	endPoint string
-	conf	 *AuthManagerConfig
+	conf     *AuthManagerConfig
 }
 
 // AuthManagerConfig contains config for a Nextcloud-based AuthManager
@@ -96,11 +97,11 @@ func NewAuthManager(c *AuthManagerConfig) (*Manager, error) {
 	} else {
 		client = &http.Client{}
 	}
-	
+
 	return &Manager{
 		endPoint: c.EndPoint, // e.g. "http://nc/apps/sciencemesh/"
 		client:   client,
-		conf: c,
+		conf:     c,
 	}, nil
 }
 
@@ -162,7 +163,7 @@ func (am *Manager) Authenticate(ctx context.Context, clientID, clientSecret stri
 		return nil, nil, err
 	}
 	log := appctx.GetLogger(ctx)
-	log.Info().Msgf("am config %s %s", am.conf.MockHTTP, am.conf.EndPoint)
+	log.Info().Msgf("am config endpoint %s", am.conf.EndPoint)
 	log.Info().Msgf("Authenticate %s %s", clientID, bodyStr)
 
 	statusCode, body, err := am.do(ctx, Action{"Authenticate", clientID, string(bodyStr)})
@@ -176,18 +177,37 @@ func (am *Manager) Authenticate(ctx context.Context, clientID, clientSecret stri
 	}
 
 	type resultsObj struct {
-		User   user.User               `json:"user"`
-		Scopes map[string]authpb.Scope `json:"scopes"`
+		UserId       *user.UserId `json:"UserId"`
+		Username     string       `json:"Username"`
+		Mail         string       `json:"Mail"`
+		MailVerified bool         `json:"MailVerified"`
+		DisplayName  string       `json:"DisplayName"`
+		Groups       []string     `json:"Groups"`
+		UIDNumber    int64        `json:"UIDNumber"`
+		GIDNumber    int64        `json:"GIDNumber"`
+		//		Opaque       *typespb.Opaque         `json:"Opaque"`
+		Scopes map[string]authpb.Scope `json:"Scopes"`
 	}
 	result := &resultsObj{}
 	err = json.Unmarshal(body, &result)
-	if err != nil {
-		return nil, nil, err
-	}
+
 	var pointersMap = make(map[string]*authpb.Scope)
-	for k := range result.Scopes {
-		scope := result.Scopes[k]
-		pointersMap[k] = &scope
-	}
-	return &result.User, pointersMap, nil
+	//	for k := range result.Scopes {
+	//		scope := result.Scopes[k]
+	//		pointersMap[k] = &scope
+	//	}
+	pointersMap, err = scope.AddOwnerScope(nil)
+
+	return &user.User{
+		Id:           result.UserId,
+		Username:     result.Username,
+		Mail:         result.Mail,
+		MailVerified: result.MailVerified,
+		DisplayName:  result.DisplayName,
+		Groups:       result.Groups,
+		UidNumber:    result.UIDNumber,
+		GidNumber:    result.GIDNumber,
+		//		Opaque:       result.Opaque,
+		// TODO add arbitrary keys as opaque data
+	}, pointersMap, nil
 }
