@@ -44,7 +44,7 @@ func init() {
 
 // StorageDriverConfig is the configuration struct for a NextcloudStorageDriver
 type StorageDriverConfig struct {
-	EndPoint string `mapstructure:"end_point"` // e.g. "http://nc/apps/sciencemesh/~alice/"
+	EndPoint string `mapstructure:"endpoint"` // e.g. "http://nc/apps/sciencemesh/~alice/"
 	MockHTTP bool   `mapstructure:"mock_http"`
 }
 
