@@ -37,17 +37,13 @@ func TestEncodeDecode(t *testing.T) {
 		Username: "marie",
 	}
 
-	ref := &provider.Reference{
-		Spec: &provider.Reference_Path{
-			Path: "/",
-		},
-	}
+	ref := &provider.Reference{Path: "/"}
 	val, err := json.Marshal(ref)
 	if err != nil {
 		t.Fatal(err)
 	}
 	scope := map[string]*auth.Scope{
-		"user": &auth.Scope{
+		"user": {
 			Resource: &types.OpaqueEntry{
 				Decoder: "json",
 				Value:   val,

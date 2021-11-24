@@ -33,11 +33,11 @@ import (
 	"github.com/cs3org/reva/internal/http/interceptors/providerauthorizer"
 	"github.com/cs3org/reva/pkg/rhttp/global"
 	"github.com/cs3org/reva/pkg/rhttp/router"
+	rtrace "github.com/cs3org/reva/pkg/trace"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	"go.opencensus.io/plugin/ochttp"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // New returns a new server
@@ -78,6 +78,8 @@ type config struct {
 	Address     string                            `mapstructure:"address"`
 	Services    map[string]map[string]interface{} `mapstructure:"services"`
 	Middlewares map[string]map[string]interface{} `mapstructure:"middlewares"`
+	CertFile    string                            `mapstructure:"certfile"`
+	KeyFile     string                            `mapstructure:"keyfile"`
 }
 
 func (c *config) init() {
@@ -109,8 +111,13 @@ func (s *Server) Start(ln net.Listener) error {
 	s.httpServer.Handler = handler
 	s.listener = ln
 
-	s.log.Info().Msgf("http server listening at %s://%s", "http", s.conf.Address)
-	err = s.httpServer.Serve(s.listener)
+	if (s.conf.CertFile != "") && (s.conf.KeyFile != "") {
+		s.log.Info().Msgf("https server listening at https://%s '%s' '%s'", s.conf.Address, s.conf.CertFile, s.conf.KeyFile)
+		err = s.httpServer.ServeTLS(s.listener, s.conf.CertFile, s.conf.KeyFile)
+	} else {
+		s.log.Info().Msgf("http server listening at http://%s '%s' '%s'", s.conf.Address, s.conf.CertFile, s.conf.KeyFile)
+		err = s.httpServer.Serve(s.listener)
+	}
 	if err == nil || err == http.ErrServerClosed {
 		return nil
 	}
@@ -289,22 +296,18 @@ func (s *Server) getHandler() (http.Handler, error) {
 		handler = triple.Middleware(traceHandler(triple.Name, handler))
 	}
 
-	// use opencensus handler to trace endpoints.
-	// TODO(labkode): enable also opencensus telemetry.
-	handler = &ochttp.Handler{
-		Handler: handler,
-		//IsPublicEndpoint: true,
-	}
-
 	return handler, nil
 }
 
 func traceHandler(name string, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, span := trace.StartSpan(r.Context(), name)
-		r = r.WithContext(ctx)
-		h.ServeHTTP(w, r)
-		span.End()
+		ctx := rtrace.Propagator.Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+		t := rtrace.Provider.Tracer("reva")
+		ctx, span := t.Start(ctx, name)
+		defer span.End()
+
+		rtrace.Propagator.Inject(ctx, propagation.HeaderCarrier(r.Header))
+		h.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

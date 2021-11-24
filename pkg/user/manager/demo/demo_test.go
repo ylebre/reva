@@ -24,7 +24,6 @@ import (
 	"testing"
 
 	userpb "github.com/cs3org/go-cs3apis/cs3/identity/user/v1beta1"
-	types "github.com/cs3org/go-cs3apis/cs3/types/v1beta1"
 	"github.com/cs3org/reva/pkg/errtypes"
 )
 
@@ -35,19 +34,15 @@ func TestUserManager(t *testing.T) {
 	manager, _ := New(nil)
 
 	// setup test data
-	uidEinstein := &userpb.UserId{Idp: "http://localhost:9998", OpaqueId: "4c510ada-c86b-4815-8820-42cdf82c3d51"}
+	uidEinstein := &userpb.UserId{Idp: "http://localhost:9998", OpaqueId: "4c510ada-c86b-4815-8820-42cdf82c3d51", Type: userpb.UserType_USER_TYPE_PRIMARY}
 	userEinstein := &userpb.User{
 		Id:          uidEinstein,
 		Username:    "einstein",
 		Groups:      []string{"sailing-lovers", "violin-haters", "physics-lovers"},
 		Mail:        "einstein@example.org",
 		DisplayName: "Albert Einstein",
-		Opaque: &types.Opaque{
-			Map: map[string]*types.OpaqueEntry{
-				"uid": &types.OpaqueEntry{Decoder: "plain", Value: []byte("123")},
-				"gid": &types.OpaqueEntry{Decoder: "plain", Value: []byte("987")},
-			},
-		},
+		UidNumber:   123,
+		GidNumber:   987,
 	}
 	uidFake := &userpb.UserId{Idp: "nonesense", OpaqueId: "fakeUser"}
 	groupsEinstein := []string{"sailing-lovers", "violin-haters", "physics-lovers"}

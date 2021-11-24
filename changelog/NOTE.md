@@ -1,302 +1,170 @@
-Changelog for reva 1.7.0 (2021-04-19)
+Changelog for reva 1.15.0 (2021-10-26)
 =======================================
 
-The following sections list the changes in reva 1.7.0 relevant to
+The following sections list the changes in reva 1.15.0 relevant to
 reva users. The changes are ordered by importance.
 
 Summary
 -------
 
- * Fix #1619: Fixes for enabling file sharing in EOS
- * Fix #1576: Fix etag changing only once a second
- * Fix #1634: Mentix site authorization status changes
- * Fix #1625: Make local file connector more error tolerant
- * Fix #1526: Fix webdav file versions endpoint bugs
- * Fix #1457: Cloning of internal mesh data lost some values
- * Fix #1597: Check for ENOTDIR on readlink error
- * Fix #1636: Skip file check for OCM data transfers
- * Fix #1552: Fix a bunch of trashbin related issues
- * Fix #1: Bump meshdirectory-web to 1.0.2
- * Chg #1562: Modularize api token management in GRAPPA drivers
- * Chg #1452: Separate blobs from metadata in the ocis storage driver
- * Enh #1514: Add grpc test suite for the storage provider
- * Enh #1466: Add integration tests for the s3ng driver
- * Enh #1521: Clarify expected failures
- * Enh #1624: Add wrappers for EOS and EOS Home storage drivers
- * Enh #1563: Implement cs3.sharing.collaboration.v1beta1.Share.ShareType
- * Enh #1411: Make InsecureSkipVerify configurable
- * Enh #1106: Make command to run litmus tests
- * Enh #1502: Bump meshdirectory-web to v1.0.4
- * Enh #1502: New MeshDirectory HTTP service UI frontend with project branding
- * Enh #1405: Quota querying and tree accounting
- * Enh #1527: Add FindAcceptedUsers method to OCM Invite API
- * Enh #1149: Add CLI Commands for OCM invitation workflow
- * Enh #1629: Implement checksums in the owncloud storage
- * Enh #1528: Port drone pipeline definition to starlark
- * Enh #110: Add signature authentication for public links
- * Enh #1495: SQL driver for the publicshare service
- * Enh #1588: Make the additional info attribute for shares configurable
- * Enh #1595: Add site account registration panel
- * Enh #1506: Site Accounts service for API keys
- * Enh #116: Enhance storage registry with virtual views and regular expressions
- * Enh #1513: Add stubs for storage spaces manipulation
+ * Fix #2168: Override provider if was previously registered
+ * Fix #2173: Fix archiver max size reached error
+ * Fix #2167: Handle nil quota in decomposedfs
+ * Fix #2153: Restrict EOS project spaces sharing permissions to admins and writers
+ * Fix #2179: Fix the returned permissions for webdav uploads
+ * Fix #2177: Retrieve the full path of a share when setting as
+ * Chg #2479: Make apps able to work with public shares
+ * Enh #2203: Add alerting webhook to SiteAcc service
+ * Enh #2190: Update CODEOWNERS
+ * Enh #2174: Inherit ACLs for files from parent directories
+ * Enh #2152: Add a reference parameter to the getQuota request
+ * Enh #2171: Add optional claim parameter to machine auth
+ * Enh #2163: Nextcloud-based share manager for pkg/ocm/share
+ * Enh #2135: Nextcloud test improvements
+ * Enh #2180: Remove OCDAV options namespace parameter
+ * Enh #2117: Add ocs cache warmup strategy for first request from the user
+ * Enh #2170: Handle propfind requests for existing files
+ * Enh #2165: Allow access to recycle bin for arbitrary paths outside homes
+ * Enh #2193: Filter root paths according to user agent
+ * Enh #2162: Implement the UpdateStorageSpace method
+ * Enh #2189: Add user setting capability
 
 Details
 -------
 
- * Bugfix #1619: Fixes for enabling file sharing in EOS
+ * Bugfix #2168: Override provider if was previously registered
 
-   https://github.com/cs3org/reva/pull/1619
+   Previously if an AppProvider registered himself two times, for example after a failure, the
+   mime types supported by the provider contained multiple times the same provider. Now this has
+   been fixed, overriding the previous one.
 
- * Bugfix #1576: Fix etag changing only once a second
+   https://github.com/cs3org/reva/pull/2168
 
-   We fixed a problem with the owncloud storage driver only considering the mtime with a second
-   resolution for the etag calculation.
+ * Bugfix #2173: Fix archiver max size reached error
 
-   https://github.com/cs3org/reva/pull/1576
+   Previously in the total size count of the files being archived, the folders were taken into
+   account, and this could cause a false max size reached error because the size of a directory is
+   recursive-computed, causing the archive to be truncated. Now in the size count, the
+   directories are skipped.
 
- * Bugfix #1634: Mentix site authorization status changes
+   https://github.com/cs3org/reva/pull/2173
 
-   If a site changes its authorization status, Mentix did not update its internal data to reflect
-   this change. This PR fixes this issue.
+ * Bugfix #2167: Handle nil quota in decomposedfs
 
-   https://github.com/cs3org/reva/pull/1634
+   Do not nil pointer derefenrence when sending nil quota to decomposedfs
 
- * Bugfix #1625: Make local file connector more error tolerant
+   https://github.com/cs3org/reva/issues/2167
 
-   The local file connector caused Reva to throw an exception if the local file for storing site
-   data couldn't be loaded. This PR changes this behavior so that only a warning is logged.
+ * Bugfix #2153: Restrict EOS project spaces sharing permissions to admins and writers
 
-   https://github.com/cs3org/reva/pull/1625
+   https://github.com/cs3org/reva/pull/2153
 
- * Bugfix #1526: Fix webdav file versions endpoint bugs
+ * Bugfix #2179: Fix the returned permissions for webdav uploads
 
-   Etag and error code related bugs have been fixed for the webdav file versions endpoint and
-   removed from the expected failures file.
+   We've fixed the returned permissions for webdav uploads. It did not consider shares and public
+   links for the permission calculation, but does so now.
 
-   https://github.com/cs3org/reva/pull/1526
+   https://github.com/cs3org/reva/pull/2179
+   https://github.com/cs3org/reva/pull/2151
 
- * Bugfix #1457: Cloning of internal mesh data lost some values
+ * Bugfix #2177: Retrieve the full path of a share when setting as
 
-   This update fixes a bug in Mentix that caused some (non-critical) values to be lost during data
-   cloning that happens internally.
+   Accepted or on shared by me
 
-   https://github.com/cs3org/reva/pull/1457
+   https://github.com/cs3org/reva/pull/2177
 
- * Bugfix #1597: Check for ENOTDIR on readlink error
+ * Change #2479: Make apps able to work with public shares
 
-   The deconstructed storage driver now handles ENOTDIR errors when `node.Child()` is called
-   for a path containing a path segment that is actually a file.
+   Public share receivers were not possible to use apps in public shares because the apps couldn't
+   load the files in the public shares. This has now been made possible by changing the scope checks
+   for public shares.
 
-   https://github.com/owncloud/ocis/issues/1239
-   https://github.com/cs3org/reva/pull/1597
+   https://github.com/owncloud/ocis/issues/2479
+   https://github.com/cs3org/reva/pull/2143
 
- * Bugfix #1636: Skip file check for OCM data transfers
+ * Enhancement #2203: Add alerting webhook to SiteAcc service
 
-   https://github.com/cs3org/reva/pull/1636
+   To integrate email alerting with the monitoring pipeline, a Prometheus webhook has been added
+   to the SiteAcc service. Furthermore account settings have been extended/modified
+   accordingly.
 
- * Bugfix #1552: Fix a bunch of trashbin related issues
+   https://github.com/cs3org/reva/pull/2203
 
-   Fixed these issues:
+ * Enhancement #2190: Update CODEOWNERS
 
-   - Complete: Deletion time in trash bin shows a wrong date - Complete: shared trash status code -
-   Partly: invalid webdav responses for unauthorized requests. - Partly: href in trashbin
-   PROPFIND response is wrong
+   https://github.com/cs3org/reva/pull/2190
 
-   Complete means there are no expected failures left. Partly means there are some scenarios
-   left.
+ * Enhancement #2174: Inherit ACLs for files from parent directories
 
-   https://github.com/cs3org/reva/pull/1552
+   https://github.com/cs3org/reva/pull/2174
 
- * Bugfix #1: Bump meshdirectory-web to 1.0.2
+ * Enhancement #2152: Add a reference parameter to the getQuota request
 
-   Updated meshdirectory-web mod to version 1.0.2 that contains fixes for OCM invite API links
-   generation.
+   Implementation of [cs3org/cs3apis#147](https://github.com/cs3org/cs3apis/pull/147)
 
-   https://github.com/sciencemesh/meshdirectory-web/pull/1
+   Make the cs3apis accept a Reference in the getQuota Request to limit the call to a specific
+   storage space.
 
- * Change #1562: Modularize api token management in GRAPPA drivers
+   https://github.com/cs3org/reva/pull/2152
+   https://github.com/cs3org/reva/pull/2178
+   https://github.com/cs3org/reva/pull/2187
 
-   This PR moves the duplicated api token management methods into a seperate utils package
+ * Enhancement #2171: Add optional claim parameter to machine auth
 
-   https://github.com/cs3org/reva/issues/1562
+   https://github.com/cs3org/reva/issues/2171
+   https://github.com/cs3org/reva/pull/2176
 
- * Change #1452: Separate blobs from metadata in the ocis storage driver
+ * Enhancement #2163: Nextcloud-based share manager for pkg/ocm/share
 
-   We changed the ocis storage driver to keep the file content separate from the metadata by
-   storing the blobs in a separate directory. This allows for using a different (potentially
-   faster) storage for the metadata.
+   Note that pkg/ocm/share is very similar to pkg/share, but it deals with cs3/sharing/ocm
+   whereas pkg/share deals with cs3/sharing/collaboration
 
-   **Note** This change makes existing ocis storages incompatible with the new code.
+   https://github.com/cs3org/reva/pull/2163
 
-   We also streamlined the ocis and the s3ng drivers so that most of the code is shared between them.
+ * Enhancement #2135: Nextcloud test improvements
 
-   https://github.com/cs3org/reva/pull/1452
+   https://github.com/cs3org/reva/pull/2135
 
- * Enhancement #1514: Add grpc test suite for the storage provider
+ * Enhancement #2180: Remove OCDAV options namespace parameter
 
-   A new test suite has been added which tests the grpc interface to the storage provider. It
-   currently runs against the ocis and the owncloud storage drivers.
+   We dropped the namespace parameter, as it is not used in the options handler.
 
-   https://github.com/cs3org/reva/pull/1514
+   https://github.com/cs3org/reva/pull/2180
 
- * Enhancement #1466: Add integration tests for the s3ng driver
+ * Enhancement #2117: Add ocs cache warmup strategy for first request from the user
 
-   We extended the integration test suite to also run all tests against the s3ng driver.
+   https://github.com/cs3org/reva/pull/2117
 
-   https://github.com/cs3org/reva/pull/1466
+ * Enhancement #2170: Handle propfind requests for existing files
 
- * Enhancement #1521: Clarify expected failures
+   https://github.com/cs3org/reva/pull/2170
 
-   Some features, while covered by the ownCloud 10 acceptance tests, will not be implmented for
-   now: - blacklisted / ignored files, because ocis/reva don't need to blacklist `.htaccess`
-   files - `OC-LazyOps` support was [removed from the
-   clients](https://github.com/owncloud/client/pull/8398). We are thinking about [a state
-   machine for uploads to properly solve that scenario and also list the state of files in progress
-   in the web ui](https://github.com/owncloud/ocis/issues/214). The expected failures
-   files now have a dedicated _Won't fix_ section for these items.
+ * Enhancement #2165: Allow access to recycle bin for arbitrary paths outside homes
 
-   https://github.com/owncloud/ocis/issues/214
-   https://github.com/cs3org/reva/pull/1521
-   https://github.com/owncloud/client/pull/8398
+   https://github.com/cs3org/reva/pull/2165
+   https://github.com/cs3org/reva/pull/2188
 
- * Enhancement #1624: Add wrappers for EOS and EOS Home storage drivers
+ * Enhancement #2193: Filter root paths according to user agent
 
-   For CERNBox, we need the mount ID to be configured according to the owner of a resource. Setting
-   this in the storageprovider means having different instances of this service to cater to
-   different users, which does not scale. This driver forms a wrapper around the EOS driver and
-   sets the mount ID according to a configurable mapping based on the owner of the resource.
+   Adds a new rule setting in the storage registry ("allowed_user_agents"), that allows a user to
+   specify which storage provider shows according to the user agent that made the request.
 
-   https://github.com/cs3org/reva/pull/1624
+   https://github.com/cs3org/reva/pull/2193
 
- * Enhancement #1563: Implement cs3.sharing.collaboration.v1beta1.Share.ShareType
+ * Enhancement #2162: Implement the UpdateStorageSpace method
 
-   Interface method Share() in pkg/ocm/share/share.go now has a share type parameter.
+   Added the UpdateStorageSpace method to the decomposedfs.
 
-   https://github.com/cs3org/reva/pull/1563
+   https://github.com/cs3org/reva/pull/2162
+   https://github.com/cs3org/reva/pull/2195
+   https://github.com/cs3org/reva/pull/2196
 
- * Enhancement #1411: Make InsecureSkipVerify configurable
+ * Enhancement #2189: Add user setting capability
 
-   Add `InsecureSkipVerify` field to `metrics.Config` struct and update examples to include
-   it.
+   We've added a capability to communicate the existance of a user settings service to clients.
 
-   https://github.com/cs3org/reva/issues/1411
-
- * Enhancement #1106: Make command to run litmus tests
-
-   This updates adds an extra make command to run litmus tests via make. `make litmus-test`
-   executes the tests.
-
-   https://github.com/cs3org/reva/issues/1106
-   https://github.com/cs3org/reva/pull/1543
-
- * Enhancement #1502: Bump meshdirectory-web to v1.0.4
-
-   Updated meshdirectory-web version to v.1.0.4 bringing multiple UX improvements in provider
-   list and map.
-
-   https://github.com/cs3org/reva/issues/1502
-   https://github.com/sciencemesh/meshdirectory-web/pull/2
-   https://github.com/sciencemesh/meshdirectory-web/pull/3
-
- * Enhancement #1502: New MeshDirectory HTTP service UI frontend with project branding
-
-   We replaced the temporary version of web frontend of the mesh directory http service with a new
-   redesigned & branded one. Because the new version is a more complex Vue SPA that contains image,
-   css and other assets, it is now served from a binary package distribution that was generated
-   using the [github.com/rakyll/statik](https://github.com/rakyll/statik) package. The
-   `http.services.meshdirectory.static` config option was obsoleted by this change.
-
-   https://github.com/cs3org/reva/issues/1502
-
- * Enhancement #1405: Quota querying and tree accounting
-
-   The ocs api now returns the user quota for the users home storage. Furthermore, the ocis storage
-   driver now reads the quota from the extended attributes of the user home or root node and
-   implements tree size accounting. Finally, ocdav PROPFINDS now handle the
-   `DAV:quota-used-bytes` and `DAV:quote-available-bytes` properties.
-
-   https://github.com/cs3org/reva/pull/1405
-   https://github.com/cs3org/reva/pull/1491
-
- * Enhancement #1527: Add FindAcceptedUsers method to OCM Invite API
-
-   https://github.com/cs3org/reva/pull/1527
-
- * Enhancement #1149: Add CLI Commands for OCM invitation workflow
-
-   This adds a couple of CLI commands, `ocm-invite-generate` and `ocm-invite-forward` to
-   generate and forward ocm invitation tokens respectively.
-
-   https://github.com/cs3org/reva/issues/1149
-
- * Enhancement #1629: Implement checksums in the owncloud storage
-
-   Implemented checksums in the owncloud storage driver.
-
-   https://github.com/cs3org/reva/pull/1629
-
- * Enhancement #1528: Port drone pipeline definition to starlark
-
-   Having the pipeline definition as a starlark script instead of plain yaml greatly improves the
-   flexibility and allows for removing lots of duplicated definitions.
-
-   https://github.com/cs3org/reva/pull/1528
-
- * Enhancement #110: Add signature authentication for public links
-
-   Implemented signature authentication for public links in addition to the existing password
-   authentication. This allows web clients to efficiently download files from password
-   protected public shares.
-
-   https://github.com/cs3org/cs3apis/issues/110
-   https://github.com/cs3org/reva/pull/1590
-
- * Enhancement #1495: SQL driver for the publicshare service
-
-   https://github.com/cs3org/reva/pull/1495
-
- * Enhancement #1588: Make the additional info attribute for shares configurable
-
-   AdditionalInfoAttribute can be configured via the `additional_info_attribute` key in the
-   form of a Go template string. If not explicitly set, the default value is `{{.Mail}}`
-
-   https://github.com/cs3org/reva/pull/1588
-
- * Enhancement #1595: Add site account registration panel
-
-   This PR adds a site account registration panel to the site accounts service. It also removes
-   site registration from the xcloud metrics driver.
-
-   https://github.com/cs3org/reva/pull/1595
-
- * Enhancement #1506: Site Accounts service for API keys
-
-   This update adds a new service to Reva that handles site accounts creation and management.
-   Registered sites can be assigned an API key through a simple web interface which is also part of
-   this service. This API key can then be used to identify a user and his/her associated (vendor or
-   partner) site.
-
-   Furthermore, Mentix was extended to make use of this new service. This way, all sites now have a
-   stable and unique site ID that not only avoids ID collisions but also introduces a new layer of
-   security (i.e., sites can only be modified or removed using the correct API key).
-
-   https://github.com/cs3org/reva/pull/1506
-
- * Enhancement #116: Enhance storage registry with virtual views and regular expressions
-
-   Add the functionality to the storage registry service to handle user requests for references
-   which can span across multiple storage providers, particularly useful for cases where
-   directories are sharded across providers or virtual views are expected.
-
-   https://github.com/cs3org/cs3apis/pull/116
-   https://github.com/cs3org/reva/pull/1570
-
- * Enhancement #1513: Add stubs for storage spaces manipulation
-
-   This PR adds stubs for the storage space CRUD methods in the storageprovider service and makes
-   the expired shares janitor configureable in the publicshares SQL driver.
-
-   https://github.com/cs3org/reva/pull/1513
+   https://github.com/owncloud/web/issues/5926
+   https://github.com/cs3org/reva/pull/2189
+   https://github.com/owncloud/ocis/pull/2655
 
 

@@ -7,6 +7,7 @@ GIT_BRANCH=`git rev-parse --symbolic-full-name --abbrev-ref HEAD`
 GIT_DIRTY=`git diff-index --quiet HEAD -- || echo "dirty-"`
 VERSION=`git describe --always`
 GO_VERSION=`go version | awk '{print $$3}'`
+MINIMUM_GO_VERSION=1.16.2
 BUILD_FLAGS="-X main.gitCommit=${GIT_COMMIT} -X main.version=${VERSION} -X main.goVersion=${GO_VERSION} -X main.buildDate=${BUILD_DATE}"
 CI_BUILD_FLAGS="-w -extldflags "-static" -X main.gitCommit=${GIT_COMMIT} -X main.version=${VERSION} -X main.goVersion=${GO_VERSION} -X main.buildDate=${BUILD_DATE}"
 LITMUS_URL_OLD="http://localhost:20080/remote.php/webdav"
@@ -29,7 +30,8 @@ off:
 imports: off
 	`go env GOPATH`/bin/goimports -w tools pkg internal cmd
 
-build: imports
+build: imports test-go-version
+	gofmt -s -w .
 	go build -ldflags ${BUILD_FLAGS} -o ./cmd/revad/revad ./cmd/revad
 	go build -ldflags ${BUILD_FLAGS} -o ./cmd/reva/reva ./cmd/reva
 
@@ -43,7 +45,7 @@ build-reva: imports
 	go build -ldflags ${BUILD_FLAGS} -o ./cmd/reva/reva ./cmd/reva
 
 test: off
-	go test -race $$(go list ./... | grep -v /tests/integration)
+	go test -coverprofile coverage.out -race $$(go list ./... | grep -v /tests/integration)
 
 test-integration: build-ci
 	cd tests/integration && go test -race ./...
@@ -71,9 +73,12 @@ lint:
 contrib:
 	git shortlog -se | cut -c8- | sort -u | awk '{print "-", $$0}' | grep -v 'users.noreply.github.com' > CONTRIBUTORS.md
 
+test-go-version:
+	@echo -e "$(MINIMUM_GO_VERSION)\n$(shell echo $(GO_VERSION) | sed 's/go//')" | sort -Vc &> /dev/null || echo -e "\n\033[33;5m[WARNING]\033[0m You are not using a supported go version. Please use $(MINIMUM_GO_VERSION) or above.\n"
+
 # for manual building only
 deps:
-	cd /tmp && rm -rf golangci-lint &&  git clone --quiet -b 'v1.38.0' --single-branch --depth 1 https://github.com/golangci/golangci-lint &> /dev/null && cd golangci-lint/cmd/golangci-lint && go install
+	cd /tmp && rm -rf golangci-lint &&  git clone --quiet -b 'v1.42.1' --single-branch --depth 1 https://github.com/golangci/golangci-lint &> /dev/null && cd golangci-lint/cmd/golangci-lint && go install
 	cd /tmp && go get golang.org/x/tools/cmd/goimports
 
 build-ci: off

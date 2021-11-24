@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
+	"strconv"
 	"strings"
 
 	"github.com/cs3org/reva/pkg/user"
@@ -64,26 +65,33 @@ func parseConfig(m map[string]interface{}) (*config, error) {
 
 // New returns a user manager implementation that reads a json file to provide user metadata.
 func New(m map[string]interface{}) (user.Manager, error) {
-	c, err := parseConfig(m)
+	mgr := &manager{}
+	err := mgr.Configure(m)
 	if err != nil {
 		return nil, err
+	}
+	return mgr, nil
+}
+
+func (m *manager) Configure(ml map[string]interface{}) error {
+	c, err := parseConfig(ml)
+	if err != nil {
+		return err
 	}
 
 	f, err := ioutil.ReadFile(c.Users)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	users := []*userpb.User{}
 
 	err = json.Unmarshal(f, &users)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	return &manager{
-		users: users,
-	}, nil
+	m.users = users
+	return nil
 }
 
 func (m *manager) GetUser(ctx context.Context, uid *userpb.UserId) (*userpb.User, error) {
@@ -111,12 +119,8 @@ func extractClaim(u *userpb.User, claim string) (string, error) {
 	case "username":
 		return u.Username, nil
 	case "uid":
-		if u.Opaque != nil && u.Opaque.Map != nil {
-			if uidObj, ok := u.Opaque.Map["uid"]; ok {
-				if uidObj.Decoder == "plain" {
-					return string(uidObj.Value), nil
-				}
-			}
+		if u.UidNumber != 0 {
+			return strconv.FormatInt(u.UidNumber, 10), nil
 		}
 	}
 	return "", errors.New("json: invalid field")

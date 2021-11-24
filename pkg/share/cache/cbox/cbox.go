@@ -16,7 +16,7 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-package eos
+package cbox
 
 import (
 	"context"
@@ -24,14 +24,17 @@ import (
 	"fmt"
 
 	userpb "github.com/cs3org/go-cs3apis/cs3/identity/user/v1beta1"
+	rpc "github.com/cs3org/go-cs3apis/cs3/rpc/v1beta1"
 	provider "github.com/cs3org/go-cs3apis/cs3/storage/provider/v1beta1"
-	types "github.com/cs3org/go-cs3apis/cs3/types/v1beta1"
+	"github.com/cs3org/reva/pkg/auth/scope"
+	ctxpkg "github.com/cs3org/reva/pkg/ctx"
+	"github.com/cs3org/reva/pkg/rgrpc/todo/pool"
 	"github.com/cs3org/reva/pkg/share/cache"
 	"github.com/cs3org/reva/pkg/share/cache/registry"
-	"github.com/cs3org/reva/pkg/storage/fs/eos"
-	"github.com/cs3org/reva/pkg/user"
+	"github.com/cs3org/reva/pkg/token/manager/jwt"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc/metadata"
 
 	// Provides mysql drivers
 	_ "github.com/go-sql-driver/mysql"
@@ -49,6 +52,7 @@ type config struct {
 	DbName       string `mapstructure:"db_name"`
 	EOSNamespace string `mapstructure:"namespace"`
 	GatewaySvc   string `mapstructure:"gatewaysvc"`
+	JWTSecret    string `mapstructure:"jwt_secret"`
 }
 
 type manager struct {
@@ -90,54 +94,56 @@ func (m *manager) GetResourceInfos() ([]*provider.ResourceInfo, error) {
 	}
 	defer rows.Close()
 
+	tokenManager, err := jwt.New(map[string]interface{}{
+		"secret": m.conf.JWTSecret,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	u := &userpb.User{
+		Id: &userpb.UserId{
+			OpaqueId: "root",
+		},
+		UidNumber: 0,
+		GidNumber: 0,
+	}
+	scope, err := scope.AddOwnerScope(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	tkn, err := tokenManager.MintToken(context.Background(), u, scope)
+	if err != nil {
+		return nil, err
+	}
+	ctx := metadata.AppendToOutgoingContext(context.Background(), ctxpkg.TokenHeader, tkn)
+
+	client, err := pool.GetGatewayServiceClient(m.conf.GatewaySvc)
+	if err != nil {
+		return nil, err
+	}
+
 	infos := []*provider.ResourceInfo{}
 	for rows.Next() {
-		var storageID, opaqueID string
-		if err := rows.Scan(&storageID, &opaqueID); err != nil {
+		var storageID, nodeID string
+		if err := rows.Scan(&storageID, &nodeID); err != nil {
 			continue
 		}
 
-		eosOpts := map[string]interface{}{
-			"namespace":         m.conf.EOSNamespace,
-			"master_url":        fmt.Sprintf("root://%s.cern.ch", storageID),
-			"version_invariant": true,
-			"gatewaysvc":        m.conf.GatewaySvc,
-		}
-		eos, err := eos.New(eosOpts)
-		if err != nil {
-			return nil, err
+		statReq := provider.StatRequest{Ref: &provider.Reference{
+			ResourceId: &provider.ResourceId{
+				StorageId: storageID,
+				OpaqueId:  nodeID,
+			},
+		}}
+
+		statRes, err := client.Stat(ctx, &statReq)
+		if err != nil || statRes.Status.Code != rpc.Code_CODE_OK {
+			continue
 		}
 
-		ctx := user.ContextSetUser(context.Background(), &userpb.User{
-			Id: &userpb.UserId{
-				OpaqueId: "root",
-			},
-			Opaque: &types.Opaque{
-				Map: map[string]*types.OpaqueEntry{
-					"uid": &types.OpaqueEntry{
-						Decoder: "plain",
-						Value:   []byte("0"),
-					},
-					"gid": &types.OpaqueEntry{
-						Decoder: "plain",
-						Value:   []byte("0"),
-					},
-				},
-			},
-		})
-
-		inf, err := eos.GetMD(ctx, &provider.Reference{
-			Spec: &provider.Reference_Id{
-				Id: &provider.ResourceId{
-					StorageId: storageID,
-					OpaqueId:  opaqueID,
-				},
-			},
-		}, []string{})
-		if err != nil {
-			return nil, err
-		}
-		infos = append(infos, inf)
+		infos = append(infos, statRes.Info)
 	}
 
 	if err = rows.Err(); err != nil {

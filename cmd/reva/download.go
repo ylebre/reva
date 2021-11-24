@@ -30,9 +30,9 @@ import (
 	rpc "github.com/cs3org/go-cs3apis/cs3/rpc/v1beta1"
 	provider "github.com/cs3org/go-cs3apis/cs3/storage/provider/v1beta1"
 	"github.com/cs3org/reva/internal/http/services/datagateway"
+	ctxpkg "github.com/cs3org/reva/pkg/ctx"
 	"github.com/cs3org/reva/pkg/errtypes"
 	"github.com/cs3org/reva/pkg/rhttp"
-	tokenpkg "github.com/cs3org/reva/pkg/token"
 	"github.com/cs3org/reva/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/studio-b12/gowebdav"
@@ -55,9 +55,7 @@ func downloadCommand() *command {
 			return err
 		}
 
-		ref := &provider.Reference{
-			Spec: &provider.Reference_Path{Path: remote},
-		}
+		ref := &provider.Reference{Path: remote}
 		req1 := &provider.StatRequest{Ref: ref}
 		ctx := getAuthContext()
 		res1, err := client.Stat(ctx, req1)
@@ -71,11 +69,7 @@ func downloadCommand() *command {
 		info := res1.Info
 
 		req2 := &provider.InitiateFileDownloadRequest{
-			Ref: &provider.Reference{
-				Spec: &provider.Reference_Path{
-					Path: remote,
-				},
-			},
+			Ref: &provider.Reference{Path: remote},
 		}
 		res, err := client.InitiateFileDownload(ctx, req2)
 		if err != nil {
@@ -194,7 +188,7 @@ func checkDownloadWebdavRef(protocols []*gateway.FileDownloadProtocol) (io.Reade
 	}
 
 	c := gowebdav.NewClient(p.DownloadEndpoint, "", "")
-	c.SetHeader(tokenpkg.TokenHeader, token)
+	c.SetHeader(ctxpkg.TokenHeader, token)
 
 	reader, err := c.ReadStream(filePath)
 	if err != nil {

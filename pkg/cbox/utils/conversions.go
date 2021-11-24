@@ -19,6 +19,7 @@
 package utils
 
 import (
+	"strings"
 	"time"
 
 	grouppb "github.com/cs3org/go-cs3apis/cs3/identity/group/v1beta1"
@@ -100,11 +101,12 @@ func ResourceTypeToItem(r provider.ResourceType) string {
 // SharePermToInt maps read/write permissions to an integer
 func SharePermToInt(p *provider.ResourcePermissions) int {
 	var perm int
-	if p.CreateContainer {
+	if p.CreateContainer || p.InitiateFileUpload {
 		perm = 15
-	} else if p.ListContainer {
+	} else if p.ListContainer || p.InitiateFileDownload {
 		perm = 1
 	}
+	// TODO map denials and resharing; currently, denials are mapped to 0
 	return perm
 }
 
@@ -142,6 +144,7 @@ func IntTosharePerm(p int) *provider.ResourcePermissions {
 			PurgeRecycle:       true,
 		}
 	default:
+		// TODO we may have other options, for now this is a denial
 		return &provider.ResourcePermissions{}
 	}
 }
@@ -165,7 +168,11 @@ func FormatUserID(u *userpb.UserId) string {
 
 // ExtractUserID retrieves a CS3API user ID from a string
 func ExtractUserID(u string) *userpb.UserId {
-	return &userpb.UserId{OpaqueId: u}
+	t := userpb.UserType_USER_TYPE_PRIMARY
+	if strings.HasPrefix(u, "guest:") {
+		t = userpb.UserType_USER_TYPE_LIGHTWEIGHT
+	}
+	return &userpb.UserId{OpaqueId: u, Type: t}
 }
 
 // FormatGroupID formats a CS3API group ID to a string
@@ -187,7 +194,11 @@ func ConvertToCS3Share(s DBShare) *collaboration.Share {
 		Id: &collaboration.ShareId{
 			OpaqueId: s.ID,
 		},
-		ResourceId:  &provider.ResourceId{OpaqueId: s.ItemSource, StorageId: s.Prefix},
+		//ResourceId:  &provider.Reference{StorageId: s.Prefix, NodeId: s.ItemSource},
+		ResourceId: &provider.ResourceId{
+			StorageId: s.Prefix,
+			OpaqueId:  s.ItemSource,
+		},
 		Permissions: &collaboration.SharePermissions{Permissions: IntTosharePerm(s.Permissions)},
 		Grantee:     ExtractGrantee(s.ShareType, s.ShareWith),
 		Owner:       ExtractUserID(s.UIDOwner),
@@ -234,7 +245,10 @@ func ConvertToCS3PublicShare(s DBShare) *link.PublicShare {
 		Id: &link.PublicShareId{
 			OpaqueId: s.ID,
 		},
-		ResourceId:        &provider.ResourceId{OpaqueId: s.ItemSource, StorageId: s.Prefix},
+		ResourceId: &provider.ResourceId{
+			StorageId: s.Prefix,
+			OpaqueId:  s.ItemSource,
+		},
 		Permissions:       &link.PublicSharePermissions{Permissions: IntTosharePerm(s.Permissions)},
 		Owner:             ExtractUserID(s.UIDOwner),
 		Creator:           ExtractUserID(s.UIDInitiator),

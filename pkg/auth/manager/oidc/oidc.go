@@ -29,7 +29,6 @@ import (
 	authpb "github.com/cs3org/go-cs3apis/cs3/auth/provider/v1beta1"
 	user "github.com/cs3org/go-cs3apis/cs3/identity/user/v1beta1"
 	rpc "github.com/cs3org/go-cs3apis/cs3/rpc/v1beta1"
-	types "github.com/cs3org/go-cs3apis/cs3/types/v1beta1"
 	"github.com/cs3org/reva/pkg/auth"
 	"github.com/cs3org/reva/pkg/auth/manager/registry"
 	"github.com/cs3org/reva/pkg/auth/scope"
@@ -80,13 +79,22 @@ func parseConfig(m map[string]interface{}) (*config, error) {
 
 // New returns an auth manager implementation that verifies the oidc token and obtains the user claims.
 func New(m map[string]interface{}) (auth.Manager, error) {
-	c, err := parseConfig(m)
+	manager := &mgr{}
+	err := manager.Configure(m)
 	if err != nil {
 		return nil, err
 	}
-	c.init()
+	return manager, nil
+}
 
-	return &mgr{c: c}, nil
+func (am *mgr) Configure(m map[string]interface{}) error {
+	c, err := parseConfig(m)
+	if err != nil {
+		return err
+	}
+	c.init()
+	am.c = c
+	return nil
 }
 
 // the clientID it would be empty as we only need to validate the clientSecret variable
@@ -131,31 +139,18 @@ func (am *mgr) Authenticate(ctx context.Context, clientID, clientSecret string) 
 		return nil, nil, fmt.Errorf("no \"preferred_username\" or \"name\" attribute found in userinfo: maybe the client did not request the oidc \"profile\"-scope")
 	}
 
-	opaqueObj := &types.Opaque{
-		Map: map[string]*types.OpaqueEntry{},
-	}
+	var uid, gid float64
 	if am.c.UIDClaim != "" {
-		uid, ok := claims[am.c.UIDClaim]
-		if ok {
-			opaqueObj.Map["uid"] = &types.OpaqueEntry{
-				Decoder: "plain",
-				Value:   []byte(fmt.Sprintf("%0.f", uid)),
-			}
-		}
+		uid, _ = claims[am.c.UIDClaim].(float64)
 	}
 	if am.c.GIDClaim != "" {
-		gid, ok := claims[am.c.GIDClaim]
-		if ok {
-			opaqueObj.Map["gid"] = &types.OpaqueEntry{
-				Decoder: "plain",
-				Value:   []byte(fmt.Sprintf("%0.f", gid)),
-			}
-		}
+		gid, _ = claims[am.c.GIDClaim].(float64)
 	}
 
 	userID := &user.UserId{
 		OpaqueId: claims[am.c.IDClaim].(string), // a stable non reassignable id
 		Idp:      claims["issuer"].(string),     // in the scope of this issuer
+		Type:     user.UserType_USER_TYPE_PRIMARY,
 	}
 	gwc, err := pool.GetGatewayServiceClient(am.c.GatewaySvc)
 	if err != nil {
@@ -182,15 +177,24 @@ func (am *mgr) Authenticate(ctx context.Context, clientID, clientSecret string) 
 		Mail:         claims["email"].(string),
 		MailVerified: claims["email_verified"].(bool),
 		DisplayName:  claims["name"].(string),
-		Opaque:       opaqueObj,
+		UidNumber:    int64(uid),
+		GidNumber:    int64(gid),
 	}
 
-	scope, err := scope.GetOwnerScope()
-	if err != nil {
-		return nil, nil, err
+	var scopes map[string]*authpb.Scope
+	if userID != nil && userID.Type == user.UserType_USER_TYPE_LIGHTWEIGHT {
+		scopes, err = scope.AddLightweightAccountScope(authpb.Role_ROLE_OWNER, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		scopes, err = scope.AddOwnerScope(nil)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
-	return u, scope, nil
+	return u, scopes, nil
 }
 
 func (am *mgr) getOAuthCtx(ctx context.Context) context.Context {

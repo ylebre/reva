@@ -30,12 +30,11 @@ import (
 	rpcv1beta1 "github.com/cs3org/go-cs3apis/cs3/rpc/v1beta1"
 	storagep "github.com/cs3org/go-cs3apis/cs3/storage/provider/v1beta1"
 	"github.com/cs3org/reva/pkg/auth/scope"
+	ctxpkg "github.com/cs3org/reva/pkg/ctx"
 	"github.com/cs3org/reva/pkg/rgrpc/todo/pool"
 	"github.com/cs3org/reva/pkg/storage/fs/ocis"
 	"github.com/cs3org/reva/pkg/storage/fs/owncloud"
-	"github.com/cs3org/reva/pkg/token"
 	jwt "github.com/cs3org/reva/pkg/token/manager/jwt"
-	ruser "github.com/cs3org/reva/pkg/user"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -60,28 +59,20 @@ var _ = Describe("storage providers", func() {
 			Id: &userpb.UserId{
 				Idp:      "0.0.0.0:19000",
 				OpaqueId: "f7fbf8c8-139b-4376-b307-cf0a8c2d0d9c",
+				Type:     userpb.UserType_USER_TYPE_PRIMARY,
 			},
+			Username: "einstein",
 		}
 
-		homeRef = &storagep.Reference{
-			Spec: &storagep.Reference_Path{Path: "/"},
-		}
-		filePath = "/file"
-		fileRef  = &storagep.Reference{
-			Spec: &storagep.Reference_Path{Path: filePath},
-		}
+		homeRef           = &storagep.Reference{Path: "/"}
+		filePath          = "/file"
+		fileRef           = &storagep.Reference{Path: filePath}
 		versionedFilePath = "/versionedFile"
-		versionedFileRef  = &storagep.Reference{
-			Spec: &storagep.Reference_Path{Path: versionedFilePath},
-		}
-		subdirPath = "/subdir"
-		subdirRef  = &storagep.Reference{
-			Spec: &storagep.Reference_Path{Path: subdirPath},
-		}
-		sharesPath = "/Shares"
-		sharesRef  = &storagep.Reference{
-			Spec: &storagep.Reference_Path{Path: sharesPath},
-		}
+		versionedFileRef  = &storagep.Reference{Path: versionedFilePath}
+		subdirPath        = "/subdir"
+		subdirRef         = &storagep.Reference{Path: subdirPath}
+		sharesPath        = "/Shares"
+		sharesRef         = &storagep.Reference{Path: sharesPath}
 	)
 
 	JustBeforeEach(func() {
@@ -91,13 +82,13 @@ var _ = Describe("storage providers", func() {
 		// Add auth token
 		tokenManager, err := jwt.New(map[string]interface{}{"secret": "changemeplease"})
 		Expect(err).ToNot(HaveOccurred())
-		scope, err := scope.GetOwnerScope()
+		scope, err := scope.AddOwnerScope(nil)
 		Expect(err).ToNot(HaveOccurred())
 		t, err := tokenManager.MintToken(ctx, user, scope)
 		Expect(err).ToNot(HaveOccurred())
-		ctx = token.ContextSetToken(ctx, t)
-		ctx = metadata.AppendToOutgoingContext(ctx, token.TokenHeader, t)
-		ctx = ruser.ContextSetUser(ctx, user)
+		ctx = ctxpkg.ContextSetToken(ctx, t)
+		ctx = metadata.AppendToOutgoingContext(ctx, ctxpkg.TokenHeader, t)
+		ctx = ctxpkg.ContextSetUser(ctx, user)
 
 		revads, err = startRevads(dependencies, variables)
 		Expect(err).ToNot(HaveOccurred())
@@ -133,9 +124,7 @@ var _ = Describe("storage providers", func() {
 
 	assertCreateContainer := func() {
 		It("creates a new directory", func() {
-			newRef := &storagep.Reference{
-				Spec: &storagep.Reference_Path{Path: "/newdir"},
-			}
+			newRef := &storagep.Reference{Path: "/newdir"}
 
 			statRes, err := serviceClient.Stat(ctx, &storagep.StatRequest{Ref: newRef})
 			Expect(err).ToNot(HaveOccurred())
@@ -219,9 +208,7 @@ var _ = Describe("storage providers", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(statRes.Status.Code).To(Equal(rpcv1beta1.Code_CODE_OK))
 
-			targetRef := &storagep.Reference{
-				Spec: &storagep.Reference_Path{Path: "/new_subdir"},
-			}
+			targetRef := &storagep.Reference{Path: "/new_subdir"}
 			res, err := serviceClient.Move(ctx, &storagep.MoveRequest{Source: subdirRef, Destination: targetRef})
 			Expect(res.Status.Code).To(Equal(rpcv1beta1.Code_CODE_OK))
 			Expect(err).ToNot(HaveOccurred())
@@ -336,13 +323,13 @@ var _ = Describe("storage providers", func() {
 			Expect(res.Status.Code).To(Equal(rpcv1beta1.Code_CODE_OK))
 
 			By("listing the recycle items")
-			listRes, err := serviceClient.ListRecycle(ctx, &storagep.ListRecycleRequest{})
+			listRes, err := serviceClient.ListRecycle(ctx, &storagep.ListRecycleRequest{Ref: homeRef})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(listRes.Status.Code).To(Equal(rpcv1beta1.Code_CODE_OK))
 
 			Expect(len(listRes.RecycleItems)).To(Equal(1))
 			item := listRes.RecycleItems[0]
-			Expect(item.Path).To(Equal(subdirPath))
+			Expect(item.Ref.Path).To(Equal(subdirPath))
 
 			By("restoring a recycle item")
 			statRes, err := serviceClient.Stat(ctx, &storagep.StatRequest{Ref: subdirRef})
@@ -351,7 +338,7 @@ var _ = Describe("storage providers", func() {
 
 			restoreRes, err := serviceClient.RestoreRecycleItem(ctx,
 				&storagep.RestoreRecycleItemRequest{
-					Ref: subdirRef,
+					Ref: homeRef,
 					Key: item.Key,
 				},
 			)
@@ -364,22 +351,20 @@ var _ = Describe("storage providers", func() {
 		})
 
 		It("restores resources to a different location", func() {
-			restoreRef := &storagep.Reference{
-				Spec: &storagep.Reference_Path{Path: "/subdirRestored"},
-			}
+			restoreRef := &storagep.Reference{Path: "/subdirRestored"}
 			By("deleting an item")
 			res, err := serviceClient.Delete(ctx, &storagep.DeleteRequest{Ref: subdirRef})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(res.Status.Code).To(Equal(rpcv1beta1.Code_CODE_OK))
 
 			By("listing the recycle items")
-			listRes, err := serviceClient.ListRecycle(ctx, &storagep.ListRecycleRequest{})
+			listRes, err := serviceClient.ListRecycle(ctx, &storagep.ListRecycleRequest{Ref: homeRef})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(listRes.Status.Code).To(Equal(rpcv1beta1.Code_CODE_OK))
 
 			Expect(len(listRes.RecycleItems)).To(Equal(1))
 			item := listRes.RecycleItems[0]
-			Expect(item.Path).To(Equal(subdirPath))
+			Expect(item.Ref.Path).To(Equal(subdirPath))
 
 			By("restoring the item to a different location")
 			statRes, err := serviceClient.Stat(ctx, &storagep.StatRequest{Ref: restoreRef})
@@ -388,9 +373,9 @@ var _ = Describe("storage providers", func() {
 
 			restoreRes, err := serviceClient.RestoreRecycleItem(ctx,
 				&storagep.RestoreRecycleItemRequest{
-					Ref:         subdirRef,
-					Key:         item.Key,
-					RestorePath: "/subdirRestored",
+					Ref:        homeRef,
+					Key:        item.Key,
+					RestoreRef: &storagep.Reference{Path: "/subdirRestored"},
 				},
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -408,7 +393,7 @@ var _ = Describe("storage providers", func() {
 			Expect(res.Status.Code).To(Equal(rpcv1beta1.Code_CODE_OK))
 
 			By("listing recycle items")
-			listRes, err := serviceClient.ListRecycle(ctx, &storagep.ListRecycleRequest{})
+			listRes, err := serviceClient.ListRecycle(ctx, &storagep.ListRecycleRequest{Ref: homeRef})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(listRes.Status.Code).To(Equal(rpcv1beta1.Code_CODE_OK))
 			Expect(len(listRes.RecycleItems)).To(Equal(1))
@@ -418,7 +403,7 @@ var _ = Describe("storage providers", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(purgeRes.Status.Code).To(Equal(rpcv1beta1.Code_CODE_OK))
 
-			listRes, err = serviceClient.ListRecycle(ctx, &storagep.ListRecycleRequest{})
+			listRes, err = serviceClient.ListRecycle(ctx, &storagep.ListRecycleRequest{Ref: homeRef})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(listRes.Status.Code).To(Equal(rpcv1beta1.Code_CODE_OK))
 			Expect(len(listRes.RecycleItems)).To(Equal(0))
@@ -432,7 +417,10 @@ var _ = Describe("storage providers", func() {
 			Expect(listRes.Status.Code).To(Equal(rpcv1beta1.Code_CODE_NOT_FOUND))
 			Expect(len(listRes.Infos)).To(Equal(0))
 
-			res, err := serviceClient.CreateReference(ctx, &storagep.CreateReferenceRequest{Path: "/Shares/reference", TargetUri: "scheme://target"})
+			res, err := serviceClient.CreateReference(ctx, &storagep.CreateReferenceRequest{
+				Ref:       &storagep.Reference{Path: "/Shares/reference"},
+				TargetUri: "scheme://target",
+			})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(res.Status.Code).To(Equal(rpcv1beta1.Code_CODE_OK))
 
@@ -478,6 +466,64 @@ var _ = Describe("storage providers", func() {
 		})
 	}
 
+	Describe("nextcloud", func() {
+		BeforeEach(func() {
+			dependencies = map[string]string{
+				"storage": "storageprovider-nextcloud.toml",
+			}
+		})
+
+		assertCreateHome()
+
+		Context("with a home and a subdirectory", func() {
+			JustBeforeEach(func() {
+				res, err := serviceClient.CreateHome(ctx, &storagep.CreateHomeRequest{})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(res.Status.Code).To(Equal(rpcv1beta1.Code_CODE_OK))
+
+				subdirRes, err := serviceClient.CreateContainer(ctx, &storagep.CreateContainerRequest{Ref: subdirRef})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(subdirRes.Status.Code).To(Equal(rpcv1beta1.Code_CODE_OK))
+			})
+
+			assertCreateContainer()
+			assertListContainer()
+			assertGetPath()
+			assertDelete()
+			assertMove()
+			assertGrants()
+			assertUploads()
+			assertDownloads()
+			assertRecycle()
+			assertReferences()
+			assertMetadata()
+		})
+
+		Context("with an existing file /versioned_file", func() {
+			JustBeforeEach(func() {
+				fs, err := ocis.New(map[string]interface{}{
+					"root":        revads["storage"].TmpRoot,
+					"enable_home": true,
+				})
+				Expect(err).ToNot(HaveOccurred())
+
+				content1 := ioutil.NopCloser(bytes.NewReader([]byte("1")))
+				content2 := ioutil.NopCloser(bytes.NewReader([]byte("22")))
+
+				ctx := ctxpkg.ContextSetUser(context.Background(), user)
+
+				err = fs.CreateHome(ctx)
+				Expect(err).ToNot(HaveOccurred())
+				err = fs.Upload(ctx, versionedFileRef, content1)
+				Expect(err).ToNot(HaveOccurred())
+				err = fs.Upload(ctx, versionedFileRef, content2)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			assertFileVersions()
+		})
+	})
+
 	Describe("ocis", func() {
 		BeforeEach(func() {
 			dependencies = map[string]string{
@@ -522,7 +568,7 @@ var _ = Describe("storage providers", func() {
 				content1 := ioutil.NopCloser(bytes.NewReader([]byte("1")))
 				content2 := ioutil.NopCloser(bytes.NewReader([]byte("22")))
 
-				ctx := ruser.ContextSetUser(context.Background(), user)
+				ctx := ctxpkg.ContextSetUser(context.Background(), user)
 
 				err = fs.CreateHome(ctx)
 				Expect(err).ToNot(HaveOccurred())
@@ -590,7 +636,7 @@ var _ = Describe("storage providers", func() {
 				content1 := ioutil.NopCloser(bytes.NewReader([]byte("1")))
 				content2 := ioutil.NopCloser(bytes.NewReader([]byte("22")))
 
-				ctx := ruser.ContextSetUser(context.Background(), user)
+				ctx := ctxpkg.ContextSetUser(context.Background(), user)
 
 				err = fs.CreateHome(ctx)
 				Expect(err).ToNot(HaveOccurred())
