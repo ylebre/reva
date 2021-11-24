@@ -83,7 +83,7 @@ func New(m map[string]interface{}) (auth.Manager, error) {
 }
 
 // NewAuthManager returns a new Nextcloud-based AuthManager
-func NewAuthManager(c *AuthManagerConfig) (*Manager, error) {
+func NewAuthManager(c *AuthManagerConfig, ctx context.Context) (*Manager, error) {
 	var client *http.Client
 	if c.MockHTTP {
 		// called := make([]string, 0)
