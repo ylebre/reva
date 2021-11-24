@@ -103,7 +103,7 @@ func NewAuthManager(c *AuthManagerConfig) (*Manager, error) {
 	return &Manager{
 		endPoint: c.EndPoint, // e.g. "http://nc/apps/sciencemesh/"
 		client:   client,
-		conf: c
+		conf: c,
 	}, nil
 }
 
