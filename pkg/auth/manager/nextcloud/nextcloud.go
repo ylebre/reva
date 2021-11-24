@@ -44,6 +44,7 @@ func init() {
 type Manager struct {
 	client   *http.Client
 	endPoint string
+	conf	 AuthManagerConfig
 }
 
 // AuthManagerConfig contains config for a Nextcloud-based AuthManager
@@ -83,7 +84,7 @@ func New(m map[string]interface{}) (auth.Manager, error) {
 }
 
 // NewAuthManager returns a new Nextcloud-based AuthManager
-func NewAuthManager(c *AuthManagerConfig, ctx context.Context) (*Manager, error) {
+func NewAuthManager(c *AuthManagerConfig) (*Manager, error) {
 	var client *http.Client
 	if c.MockHTTP {
 		// called := make([]string, 0)
@@ -102,6 +103,7 @@ func NewAuthManager(c *AuthManagerConfig, ctx context.Context) (*Manager, error)
 	return &Manager{
 		endPoint: c.EndPoint, // e.g. "http://nc/apps/sciencemesh/"
 		client:   client,
+		conf: c
 	}, nil
 }
 
