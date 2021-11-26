@@ -94,7 +94,7 @@ func NewAuthManager(c *AuthManagerConfig) (*Manager, error) {
 		client = nil
 	} else {
 		if len(c.EndPoint) == 0 {
-			return nil, errors.New("Please specify 'endpoint' in '[grpc.services.authprovider.drivers.nextcloud]'")
+			return nil, errors.New("Please specify 'endpoint' in '[grpc.services.authprovider.auth_managers.nextcloud]'")
 		}
 		client = &http.Client{}
 	}
