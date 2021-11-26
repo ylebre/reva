@@ -279,12 +279,6 @@ func (h *invitesHandler) findAcceptedUsers(w http.ResponseWriter, r *http.Reques
 	}
 
 	indentedResponse, _ := json.MarshalIndent(response, "", "   ")
-	_, err := w.Write([]byte(indentedResponse))
-	if err != nil {
-		WriteError(w, r, APIErrorServerError, "error writing token data", err)
-		return
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(indentedResponse); err != nil {
