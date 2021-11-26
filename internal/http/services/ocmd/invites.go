@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	userpb "github.com/cs3org/go-cs3apis/cs3/identity/user/v1beta1"
+	userv1beta1 "github.com/cs3org/go-cs3apis/cs3/identity/user/v1beta1"
 	invitepb "github.com/cs3org/go-cs3apis/cs3/ocm/invite/v1beta1"
 	ocmprovider "github.com/cs3org/go-cs3apis/cs3/ocm/provider/v1beta1"
 	rpc "github.com/cs3org/go-cs3apis/cs3/rpc/v1beta1"
@@ -66,6 +67,8 @@ func (h *invitesHandler) Handler() http.Handler {
 			h.forwardInvite(w, r)
 		case "accept":
 			h.acceptInvite(w, r)
+		case "find-accepted-users":
+			h.findAcceptedUsers(w, r)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -262,4 +265,29 @@ func (h *invitesHandler) acceptInvite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Info().Msgf("User: %+v added to accepted users.", userObj)
+}
+
+func (h *invitesHandler) findAcceptedUsers(w http.ResponseWriter, r *http.Request) {
+	log := appctx.GetLogger(r.Context())
+
+	// https://github.com/cs3org/go-cs3apis/blob/0148f98/cs3/identity/user/v1beta1/resources.pb.go#L140-L153
+	einstein := userv1beta1.User{Id: &userpb.UserId{Idp: "1"}, Username: "Albert Einstein"}
+
+	// https://github.com/cs3org/go-cs3apis/blob/0148f98/cs3/ocm/invite/v1beta1/invite_api.pb.go#L520-L533
+	response := invitepb.FindAcceptedUsersResponse{
+		AcceptedUsers: []*userv1beta1.User{&einstein},
+	}
+
+	indentedResponse, _ := json.MarshalIndent(response, "", "   ")
+	_, err := w.Write([]byte(indentedResponse))
+	if err != nil {
+		WriteError(w, r, APIErrorServerError, "error writing token data", err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(indentedResponse); err != nil {
+		log.Err(err).Msg("Error writing to ResponseWriter")
+	}
 }
