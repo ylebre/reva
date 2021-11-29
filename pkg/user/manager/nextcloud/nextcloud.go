@@ -21,6 +21,7 @@ package nextcloud
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -94,6 +95,9 @@ func NewUserManager(c *UserManagerConfig) (*Manager, error) {
 		// Wait for SetHTTPClient to be called later
 		client = nil
 	} else {
+		if len(c.EndPoint) == 0 {
+			return nil, errors.New("Please specify 'endpoint' in '[grpc.services.userprovider.drivers.nextcloud]'")
+		}
 		client = &http.Client{}
 	}
 
@@ -109,6 +113,7 @@ func (um *Manager) SetHTTPClient(c *http.Client) {
 }
 
 func getUser(ctx context.Context) (*userpb.User, error) {
+	fmt.Println("nextcloud user manager getting user from grpc context, line 116!")
 	u, ok := ctxpkg.ContextGetUser(ctx)
 	if !ok {
 		err := errors.Wrap(errtypes.UserRequired(""), "nextcloud storage driver: error getting user from ctx")
@@ -117,12 +122,8 @@ func getUser(ctx context.Context) (*userpb.User, error) {
 	return u, nil
 }
 
-func (um *Manager) do(ctx context.Context, a Action) (int, []byte, error) {
-	user, err := getUser(ctx)
-	if err != nil {
-		return 0, nil, err
-	}
-	url := um.endPoint + "~" + user.Username + "/api/user/" + a.verb
+func (um *Manager) do(ctx context.Context, a Action, username string) (int, []byte, error) {
+	url := um.endPoint + "~" + username + "/api/user/" + a.verb
 	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(a.argS))
 	if err != nil {
 		panic(err)
@@ -146,21 +147,32 @@ func (um *Manager) Configure(ml map[string]interface{}) error {
 
 // GetUser method as defined in https://github.com/cs3org/reva/blob/v1.13.0/pkg/user/user.go#L29-L35
 func (um *Manager) GetUser(ctx context.Context, uid *userpb.UserId) (*userpb.User, error) {
-	bodyStr, err := json.Marshal(uid)
-	if err != nil {
-		return nil, err
-	}
-	_, respBody, err := um.do(ctx, Action{"GetUser", string(bodyStr)})
-	if err != nil {
-		return nil, err
-	}
+	// FIXME: work around https://github.com/pondersource/nc-sciencemesh/issues/148
+	return &userpb.User{
+		Id: &userpb.UserId{
+			OpaqueId: uid.OpaqueId,
+			Idp:      "local",
+		},
+	}, nil
+	// fmt.Printf("nextcloud user manager asking nc about a user '%s', line 150!", uid.OpaqueId)
 
-	result := &userpb.User{}
-	err = json.Unmarshal(respBody, &result)
-	if err != nil {
-		return nil, err
-	}
-	return result, err
+	// bodyStr, err := json.Marshal(uid)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// _, respBody, err := um.do(ctx, Action{"GetUser", string(bodyStr)}, uid.OpaqueId)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// result := &userpb.User{}
+	// err = json.Unmarshal(respBody, &result)
+	// fmt.Printf("response body '%s' unmarshalled to '%s'!", respBody, result.Id.OpaqueId)
+
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// return result, err
 }
 
 // GetUserByClaim method as defined in https://github.com/cs3org/reva/blob/v1.13.0/pkg/user/user.go#L29-L35
@@ -173,8 +185,13 @@ func (um *Manager) GetUserByClaim(ctx context.Context, claim, value string) (*us
 		Claim: claim,
 		Value: value,
 	}
+	user, err := getUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	bodyStr, _ := json.Marshal(bodyObj)
-	_, respBody, err := um.do(ctx, Action{"GetUserByClaim", string(bodyStr)})
+	_, respBody, err := um.do(ctx, Action{"GetUserByClaim", string(bodyStr)}, user.Username)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +209,12 @@ func (um *Manager) GetUserGroups(ctx context.Context, uid *userpb.UserId) ([]str
 	if err != nil {
 		return nil, err
 	}
-	_, respBody, err := um.do(ctx, Action{"GetUserGroups", string(bodyStr)})
+	user, err := getUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	_, respBody, err := um.do(ctx, Action{"GetUserGroups", string(bodyStr)}, user.Username)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +228,12 @@ func (um *Manager) GetUserGroups(ctx context.Context, uid *userpb.UserId) ([]str
 
 // FindUsers method as defined in https://github.com/cs3org/reva/blob/v1.13.0/pkg/user/user.go#L29-L35
 func (um *Manager) FindUsers(ctx context.Context, query string) ([]*userpb.User, error) {
-	_, respBody, err := um.do(ctx, Action{"FindUsers", query})
+	user, err := getUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	_, respBody, err := um.do(ctx, Action{"FindUsers", query}, user.Username)
 	if err != nil {
 		return nil, err
 	}

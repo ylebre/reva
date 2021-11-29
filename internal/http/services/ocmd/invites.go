@@ -23,6 +23,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 
 	userpb "github.com/cs3org/go-cs3apis/cs3/identity/user/v1beta1"
 	invitepb "github.com/cs3org/go-cs3apis/cs3/ocm/invite/v1beta1"
@@ -64,6 +66,10 @@ func (h *invitesHandler) Handler() http.Handler {
 			h.forwardInvite(w, r)
 		case "accept":
 			h.acceptInvite(w, r)
+		case "find-accepted-users":
+			h.findAcceptedUsers(w, r)
+		case "generate":
+			h.generate(w, r)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -202,8 +208,19 @@ func (h *invitesHandler) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, r, APIErrorServerError, fmt.Sprintf("error retrieving client IP from request: %s", r.RemoteAddr), err)
 		return
 	}
+
+	if !(strings.Contains(recipientProvider, "://")) {
+		recipientProvider = "https://" + recipientProvider
+	}
+
+	recipientProviderURL, err := url.Parse(recipientProvider)
+	if err != nil {
+		WriteError(w, r, APIErrorServerError, fmt.Sprintf("error parseing recipientProvider URL: %s", recipientProvider), err)
+		return
+	}
+
 	providerInfo := ocmprovider.ProviderInfo{
-		Domain: recipientProvider,
+		Domain: recipientProviderURL.Hostname(),
 		Services: []*ocmprovider.Service{
 			{
 				Host: clientIP,
@@ -249,4 +266,54 @@ func (h *invitesHandler) acceptInvite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Info().Msgf("User: %+v added to accepted users.", userObj)
+}
+
+func (h *invitesHandler) findAcceptedUsers(w http.ResponseWriter, r *http.Request) {
+	log := appctx.GetLogger(r.Context())
+
+	ctx := r.Context()
+	gatewayClient, err := pool.GetGatewayServiceClient(h.gatewayAddr)
+	if err != nil {
+		WriteError(w, r, APIErrorServerError, "error getting gateway grpc client", err)
+		return
+	}
+
+	response, err := gatewayClient.FindAcceptedUsers(ctx, &invitepb.FindAcceptedUsersRequest{
+		Filter: "",
+	})
+	if err != nil {
+		WriteError(w, r, APIErrorServerError, "error sending a grpc find accepted users request", err)
+		return
+	}
+
+	indentedResponse, _ := json.MarshalIndent(response, "", "   ")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(indentedResponse); err != nil {
+		log.Err(err).Msg("Error writing to ResponseWriter")
+	}
+}
+
+func (h *invitesHandler) generate(w http.ResponseWriter, r *http.Request) {
+	log := appctx.GetLogger(r.Context())
+
+	ctx := r.Context()
+	gatewayClient, err := pool.GetGatewayServiceClient(h.gatewayAddr)
+	if err != nil {
+		WriteError(w, r, APIErrorServerError, "error getting gateway grpc client", err)
+		return
+	}
+
+	response, err := gatewayClient.GenerateInviteToken(ctx, &invitepb.GenerateInviteTokenRequest{})
+	if err != nil {
+		WriteError(w, r, APIErrorServerError, "error sending a grpc generate invite token request", err)
+		return
+	}
+
+	indentedResponse, _ := json.MarshalIndent(response, "", "   ")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(indentedResponse); err != nil {
+		log.Err(err).Msg("Error writing to ResponseWriter")
+	}
 }

@@ -1,4 +1,4 @@
-// Copyright 2018-2021 CERN
+// Copyright 2018-2020 CERN
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,16 +16,15 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-package nextcloud_test
+package meshdata
 
-import (
-	"testing"
-
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+const (
+	// EndpointGateway identifies the Gateway endpoint
+	EndpointGateway = "GATEWAY"
+	// EndpointMetrics identifies the Metrics endpoint
+	EndpointMetrics = "METRICS"
+	// EndpointWebdav identifies the Webdav endpoint
+	EndpointWebdav = "WEBDAV"
+	// EndpointOCM identifies the OCM endpoint
+	EndpointOCM = "OCM"
 )
-
-func TestNextcloud(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Nextcloud Suite")
-}

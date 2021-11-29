@@ -66,6 +66,7 @@ func (h *sharesHandler) createShare(w http.ResponseWriter, r *http.Request) {
 	if err == nil && contentType == "application/json" {
 		defer r.Body.Close()
 		reqBody, err := io.ReadAll(r.Body)
+		fmt.Printf("Got JSON body: '%s'", reqBody)
 		if err == nil {
 			reqMap := make(map[string]string)
 			err = json.Unmarshal(reqBody, &reqMap)
@@ -120,6 +121,7 @@ func (h *sharesHandler) createShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Printf("Looking for user! %s", shareWith)
 	userRes, err := gatewayClient.GetUser(ctx, &userpb.GetUserRequest{
 		UserId: &userpb.UserId{OpaqueId: shareWith},
 	})

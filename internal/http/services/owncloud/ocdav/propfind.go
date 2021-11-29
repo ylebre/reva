@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -40,10 +41,12 @@ import (
 	"github.com/cs3org/reva/internal/http/services/owncloud/ocs/conversions"
 	"github.com/cs3org/reva/pkg/appctx"
 	ctxpkg "github.com/cs3org/reva/pkg/ctx"
+	"github.com/cs3org/reva/pkg/publicshare"
 	rtrace "github.com/cs3org/reva/pkg/trace"
 	"github.com/cs3org/reva/pkg/utils"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 const (
@@ -122,11 +125,15 @@ func (s *svc) handleSpacesPropfind(w http.ResponseWriter, r *http.Request, space
 	}
 
 	// parentInfo Path is the name but we need /
-	parentInfo.Path = "/"
+	if r.URL.Path != "" {
+		parentInfo.Path = r.URL.Path
+	} else {
+		parentInfo.Path = "/"
+	}
 
 	// prefix space id to paths
 	for i := range resourceInfos {
-		resourceInfos[i].Path = path.Join("/", spaceID, r.URL.Path, resourceInfos[i].Path)
+		resourceInfos[i].Path = path.Join("/", spaceID, resourceInfos[i].Path)
 	}
 
 	s.propfindResponse(ctx, w, r, "", pf, parentInfo, resourceInfos, sublog)
@@ -134,7 +141,34 @@ func (s *svc) handleSpacesPropfind(w http.ResponseWriter, r *http.Request, space
 }
 
 func (s *svc) propfindResponse(ctx context.Context, w http.ResponseWriter, r *http.Request, namespace string, pf propfindXML, parentInfo *provider.ResourceInfo, resourceInfos []*provider.ResourceInfo, log zerolog.Logger) {
-	propRes, err := s.multistatusResponse(ctx, &pf, resourceInfos, namespace)
+	ctx, span := rtrace.Provider.Tracer("ocdav").Start(ctx, "propfind_response")
+	defer span.End()
+
+	filters := make([]*link.ListPublicSharesRequest_Filter, 0, len(resourceInfos))
+	for i := range resourceInfos {
+		filters = append(filters, publicshare.ResourceIDFilter(resourceInfos[i].Id))
+	}
+
+	client, err := s.getClient()
+	if err != nil {
+		log.Error().Err(err).Msg("error getting grpc client")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var linkshares map[string]struct{}
+	listResp, err := client.ListPublicShares(ctx, &link.ListPublicSharesRequest{Filters: filters})
+	if err == nil {
+		linkshares := make(map[string]struct{})
+		for i := range listResp.Share {
+			linkshares[listResp.Share[i].ResourceId.OpaqueId] = struct{}{}
+		}
+	} else {
+		log.Error().Err(err).Msg("propfindResponse: couldn't list public shares")
+		span.SetStatus(codes.Error, err.Error())
+	}
+
+	propRes, err := s.multistatusResponse(ctx, &pf, resourceInfos, namespace, linkshares)
 	if err != nil {
 		log.Error().Err(err).Msg("error formatting propfind")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -171,6 +205,12 @@ func (s *svc) getResourceInfos(ctx context.Context, w http.ResponseWriter, r *ht
 	if depth != "0" && depth != "1" && depth != "infinity" {
 		log.Debug().Str("depth", depth).Msgf("invalid Depth header value")
 		w.WriteHeader(http.StatusBadRequest)
+		m := fmt.Sprintf("Invalid Depth header value: %v", depth)
+		b, err := Marshal(exception{
+			code:    SabredavBadRequest,
+			message: m,
+		})
+		HandleWebdavError(&log, w, b, err)
 		return nil, nil, false
 	}
 
@@ -219,6 +259,10 @@ func (s *svc) getResourceInfos(ctx context.Context, w http.ResponseWriter, r *ht
 		}
 		HandleErrorStatus(&log, w, res.Status)
 		return nil, nil, false
+	}
+
+	if spacesPropfind {
+		res.Info.Path = ref.Path
 	}
 
 	parentInfo := res.Info
@@ -279,9 +323,18 @@ func (s *svc) getResourceInfos(ctx context.Context, w http.ResponseWriter, r *ht
 		for len(stack) > 0 {
 			// retrieve path on top of stack
 			path := stack[len(stack)-1]
-			ref = &provider.Reference{Path: path}
+
+			var nRef *provider.Reference
+			if spacesPropfind {
+				nRef = &provider.Reference{
+					ResourceId: ref.ResourceId,
+					Path:       path,
+				}
+			} else {
+				nRef = &provider.Reference{Path: path}
+			}
 			req := &provider.ListContainerRequest{
-				Ref:                   ref,
+				Ref:                   nRef,
 				ArbitraryMetadataKeys: metadataKeys,
 			}
 			res, err := client.ListContainer(ctx, req)
@@ -295,6 +348,19 @@ func (s *svc) getResourceInfos(ctx context.Context, w http.ResponseWriter, r *ht
 				return nil, nil, false
 			}
 
+			stack = stack[:len(stack)-1]
+
+			// check sub-containers in reverse order and add them to the stack
+			// the reversed order here will produce a more logical sorting of results
+			for i := len(res.Infos) - 1; i >= 0; i-- {
+				if spacesPropfind {
+					res.Infos[i].Path = utils.MakeRelativePath(filepath.Join(nRef.Path, res.Infos[i].Path))
+				}
+				if res.Infos[i].Type == provider.ResourceType_RESOURCE_TYPE_CONTAINER {
+					stack = append(stack, res.Infos[i].Path)
+				}
+			}
+
 			resourceInfos = append(resourceInfos, res.Infos...)
 
 			if depth != "infinity" {
@@ -302,17 +368,6 @@ func (s *svc) getResourceInfos(ctx context.Context, w http.ResponseWriter, r *ht
 			}
 
 			// TODO: stream response to avoid storing too many results in memory
-
-			stack = stack[:len(stack)-1]
-
-			// check sub-containers in reverse order and add them to the stack
-			// the reversed order here will produce a more logical sorting of results
-			for i := len(res.Infos) - 1; i >= 0; i-- {
-				// for i := range res.Infos {
-				if res.Infos[i].Type == provider.ResourceType_RESOURCE_TYPE_CONTAINER {
-					stack = append(stack, res.Infos[i].Path)
-				}
-			}
 		}
 	}
 
@@ -374,10 +429,10 @@ func readPropfind(r io.Reader) (pf propfindXML, status int, err error) {
 	return pf, 0, nil
 }
 
-func (s *svc) multistatusResponse(ctx context.Context, pf *propfindXML, mds []*provider.ResourceInfo, ns string) (string, error) {
+func (s *svc) multistatusResponse(ctx context.Context, pf *propfindXML, mds []*provider.ResourceInfo, ns string, linkshares map[string]struct{}) (string, error) {
 	responses := make([]*responseXML, 0, len(mds))
 	for i := range mds {
-		res, err := s.mdToPropResponse(ctx, pf, mds[i], ns)
+		res, err := s.mdToPropResponse(ctx, pf, mds[i], ns, linkshares)
 		if err != nil {
 			return "", err
 		}
@@ -429,7 +484,7 @@ func (s *svc) newPropRaw(key, val string) *propertyXML {
 // mdToPropResponse converts the CS3 metadata into a webdav PropResponse
 // ns is the CS3 namespace that needs to be removed from the CS3 path before
 // prefixing it with the baseURI
-func (s *svc) mdToPropResponse(ctx context.Context, pf *propfindXML, md *provider.ResourceInfo, ns string) (*responseXML, error) {
+func (s *svc) mdToPropResponse(ctx context.Context, pf *propfindXML, md *provider.ResourceInfo, ns string, linkshares map[string]struct{}) (*responseXML, error) {
 	sublog := appctx.GetLogger(ctx).With().Interface("md", md).Str("ns", ns).Logger()
 	md.Path = strings.TrimPrefix(md.Path, ns)
 
@@ -739,11 +794,23 @@ func (s *svc) mdToPropResponse(ctx context.Context, pf *propfindXML, md *provide
 						propstatNotFound.Prop = append(propstatNotFound.Prop, s.newProp("oc:checksums", ""))
 					}
 				case "share-types": // desktop
+					var types strings.Builder
 					k := md.GetArbitraryMetadata()
 					amd := k.GetMetadata()
 					if amdv, ok := amd[metadataKeyOf(&pf.Prop[i])]; ok {
-						st := fmt.Sprintf("<oc:share-type>%s</oc:share-type>", amdv)
-						propstatOK.Prop = append(propstatOK.Prop, s.newPropRaw("oc:share-types", st))
+						types.WriteString("<oc:share-type>")
+						types.WriteString(amdv)
+						types.WriteString("</oc:share-type>")
+					}
+
+					if md.Id != nil {
+						if _, ok := linkshares[md.Id.OpaqueId]; ok {
+							types.WriteString("<oc:share-type>3</oc:share-type>")
+						}
+					}
+
+					if types.Len() != 0 {
+						propstatOK.Prop = append(propstatOK.Prop, s.newPropRaw("oc:share-types", types.String()))
 					} else {
 						propstatNotFound.Prop = append(propstatNotFound.Prop, s.newProp("oc:"+pf.Prop[i].Local, ""))
 					}
